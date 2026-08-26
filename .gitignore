@@ -1,0 +1,21 @@
+# Dependencias
+node_modules/
+
+# Banco de dados local (dados reais de clientes/processos do escritorio)
+dados/
+
+# Arquivos enviados (Modelos e Documentos) - podem conter documentos de clientes
+uploads/**
+!uploads/**/
+!uploads/**/.gitkeep
+
+# Logs e afins
+npm-debug.log*
+*.log
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Configuracao local do Claude Code (ferramenta de dev, nao faz parte do app)
+.claude/

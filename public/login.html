@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrar - Gestão Jurídica</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/css/estilo.css">
+</head>
+<body>
+<div class="tela-login">
+  <div class="cartao-login">
+    <div class="marca-login" id="marca-login"></div>
+    <h1>Gestão Jurídica</h1>
+    <div class="subtitulo">Acesso do escritório</div>
+
+    <form id="form-login">
+      <div class="campo">
+        <label for="campo-login">Usuário</label>
+        <input type="text" id="campo-login" autocomplete="username" required autofocus>
+      </div>
+      <div class="campo">
+        <label for="campo-senha">Senha</label>
+        <input type="password" id="campo-senha" autocomplete="current-password" required>
+      </div>
+      <div id="mensagem-erro" class="campo-erro oculto"></div>
+      <button type="submit" class="botao botao-primario" style="width:100%; justify-content:center; margin-top:6px;">Entrar</button>
+    </form>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/icones.js"></script>
+<script>
+document.getElementById('marca-login').innerHTML = Icone('balanca', 26);
+
+document.getElementById('form-login').addEventListener('submit', async (evento) => {
+  evento.preventDefault();
+  const erroEl = document.getElementById('mensagem-erro');
+  erroEl.classList.add('oculto');
+
+  const login = document.getElementById('campo-login').value.trim();
+  const senha = document.getElementById('campo-senha').value;
+
+  try {
+    await api.post('/api/auth/login', { login, senha });
+    window.location.href = '/index.html';
+  } catch (erro) {
+    erroEl.textContent = erro.message || 'Não foi possível entrar.';
+    erroEl.classList.remove('oculto');
+  }
+});
+
+// Se ja estiver logado, pula direto para o app
+api.get('/api/auth/me').then(() => { window.location.href = '/index.html'; }).catch(() => {});
+</script>
+</body>
+</html>

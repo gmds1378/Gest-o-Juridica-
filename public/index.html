@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gestão Jurídica</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/css/estilo.css">
+</head>
+<body>
+<div id="app-shell">
+
+  <aside class="barra-lateral" id="barra-lateral">
+    <div class="marca">
+      <span id="icone-marca"></span>
+      <span>Gestão Jurídica<small id="nome-escritorio">Escritório</small></span>
+    </div>
+    <nav class="navegacao" id="navegacao">
+      <a href="#/painel" data-rota="painel"><span class="icone" data-icone="casa"></span> Painel</a>
+      <a href="#/documentos" data-rota="documentos"><span class="icone" data-icone="documento"></span> Documentos</a>
+      <a href="#/modelos" data-rota="modelos"><span class="icone" data-icone="camadas"></span> Modelos</a>
+      <a href="#/agenda" data-rota="agenda"><span class="icone" data-icone="calendario"></span> Agenda e Prazos</a>
+      <a href="#/anotacoes" data-rota="anotacoes"><span class="icone" data-icone="nota"></span> Anotações</a>
+      <a href="#/processos" data-rota="processos"><span class="icone" data-icone="balanca"></span> Processos e Clientes</a>
+      <a href="#/publicacoes" data-rota="publicacoes"><span class="icone" data-icone="caixaEntrada"></span> Publicações <span class="contador-menu oculto" id="badge-publicacoes">0</span></a>
+    </nav>
+    <div class="rodape-lateral">
+      <button class="usuario-logado" id="botao-meu-perfil" title="Editar meu perfil" style="width:100%; border:none; background:none; text-align:left; cursor:pointer;">
+        <div class="avatar" id="avatar-usuario">?</div>
+        <div class="info">
+          <div class="nome" id="nome-usuario">-</div>
+          <div class="perfil" id="perfil-usuario">-</div>
+        </div>
+      </button>
+      <div class="flex gap-8" style="margin-top:8px;">
+        <button class="botao botao-texto botao-pequeno" id="botao-tema" style="flex:1;"><span id="icone-tema"></span> Tema</button>
+        <button class="botao botao-texto botao-pequeno" id="botao-sair" style="flex:1;">Sair</button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="conteudo-principal">
+    <header class="barra-topo">
+      <button class="botao botao-icone botao-menu-mobile" id="botao-menu-mobile"></button>
+
+      <div class="caixa-busca">
+        <span class="icone-lupa" id="icone-busca"></span>
+        <input type="text" id="campo-busca-global" placeholder="Buscar processos, documentos, anotações...">
+        <div class="resultados-busca oculto" id="resultados-busca"></div>
+      </div>
+
+      <div class="sino-wrap">
+        <button class="botao botao-icone" id="botao-sino"><span id="icone-sino"></span><span class="sino-contador oculto" id="sino-contador">0</span></button>
+        <div class="painel-flutuante oculto" id="painel-alertas">
+          <div class="cabecalho">Prazos próximos</div>
+          <div class="lista" id="lista-alertas"></div>
+        </div>
+      </div>
+    </header>
+
+    <main class="pagina" id="conteudo-pagina">
+      <div class="carregando">Carregando...</div>
+    </main>
+  </div>
+</div>
+
+<script src="/js/icones.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/roteador.js"></script>
+<script src="/js/paineis/painel.js"></script>
+<script src="/js/paineis/documentos.js"></script>
+<script src="/js/paineis/modelos.js"></script>
+<script src="/js/paineis/agenda.js"></script>
+<script src="/js/paineis/anotacoes.js"></script>
+<script src="/js/paineis/processos.js"></script>
+<script src="/js/paineis/publicacoes.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>
