@@ -44,6 +44,7 @@ const rotaAuditoria = require('./rotas/auditoria');
 const aaspIntimacoes = require('./servicos/aaspIntimacoes');
 const resumoIA = require('./servicos/resumoIA');
 const movimentacoes = require('./servicos/movimentacoes');
+const acervo = require('./servicos/acervoDocumentos');
 
 const app = express();
 const PORTA = process.env.PORTA || process.env.PORT || 3000;
@@ -169,7 +170,12 @@ process.on('unhandledRejection', (motivo) => {
 app.listen(PORTA, '0.0.0.0', () => {
   console.log(`\nSistema de Gestao Juridica rodando (${PRODUCAO ? 'producao' : 'desenvolvimento'}).`);
   console.log(`- Porta local:  http://localhost:${PORTA}`);
-  console.log(`- Fuso horario: ${process.env.TZ}\n`);
+  console.log(`- Fuso horario: ${process.env.TZ}`);
+  if (acervo.USA_DRIVE) console.log(`- Acervo de documentos: ${acervo.ACERVO}\n`);
+  else console.log('- Acervo de documentos: disco local (rclone nao configurado)\n');
+  try { acervo.migrarLocais(db); } catch (erro) {
+    console.error('[Acervo] Falha ao enviar documentos locais ao Drive:', erro.message);
+  }
 });
 
 // Sincronizacao automatica de publicacoes (ex.: AASP Intimacoes). E um "no-op"

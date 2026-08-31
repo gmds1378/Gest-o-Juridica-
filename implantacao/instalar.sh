@@ -148,6 +148,10 @@ cat > /etc/cron.d/gestao-juridica-backup <<EOF
 # Backup diario do Sistema de Gestao Juridica
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+RCLONE_CONFIG=/etc/rclone-gestao.conf
+RCLONE_DESTINO=gdrive:BackupGestaoJuridica
+BACKUP_RETENCAO_DIAS=30
+RCLONE_ACERVO=gdrive:AcervoDocumentos
 0 3 * * * $USUARIO $PROJETO/implantacao/backup.sh >> /var/log/gestao-juridica-backup.log 2>&1
 EOF
 touch /var/log/gestao-juridica-backup.log

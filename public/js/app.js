@@ -68,6 +68,7 @@ const Utilidades = {
 
 const Modal = {
   _sobreposicaoAtual: null,
+  _ocupado: false,
 
   abrir({ titulo, corpoHtml, rodapeHtml = '', largo = false, aoMontar = null, obrigatorio = false }) {
     this.fechar();
@@ -78,7 +79,7 @@ const Modal = {
       <div class="modal ${largo ? 'modal-largo' : ''}">
         <div class="modal-cabecalho">
           <h2>${titulo}</h2>
-          ${obrigatorio ? '' : '<button class="botao botao-icone" data-fechar-modal>✕</button>'}
+          ${obrigatorio ? '' : '<button class="botao botao-icone" data-fechar-modal type="button">✕</button>'}
         </div>
         <div class="modal-corpo">${corpoHtml}</div>
         ${rodapeHtml ? `<div class="modal-rodape">${rodapeHtml}</div>` : ''}
@@ -86,7 +87,7 @@ const Modal = {
     `;
 
     sobreposicao.addEventListener('click', (evento) => {
-      if (obrigatorio) return;
+      if (obrigatorio || this._ocupado) return;
       if (evento.target === sobreposicao || evento.target.closest('[data-fechar-modal]')) {
         this.fechar();
       }
@@ -99,6 +100,7 @@ const Modal = {
   },
 
   fechar() {
+    this._ocupado = false;
     if (this._sobreposicaoAtual) {
       this._sobreposicaoAtual.remove();
       this._sobreposicaoAtual = null;
@@ -106,6 +108,46 @@ const Modal = {
       // sem esperar pela atualizacao periodica de 5 minutos.
       if (typeof atualizarSino === 'function') atualizarSino();
       if (typeof atualizarBadgePublicacoes === 'function') atualizarBadgePublicacoes();
+    }
+  },
+
+  // Trava a modal enquanto uma acao (salvar, enviar, excluir) roda: o botao
+  // mostra espera, os outros desabilitam, e cliques extras nao disparam de novo.
+  async durante(rotulo, fn, opcoes = {}) {
+    if (this._ocupado) return;
+    const overlay = this._sobreposicaoAtual;
+    if (!overlay) return fn();
+
+    this._ocupado = true;
+    overlay.classList.add('ocupada');
+    overlay.setAttribute('aria-busy', 'true');
+    const botoes = [...overlay.querySelectorAll('button')];
+    const snapshot = botoes.map((b) => ({ b, html: b.innerHTML, disabled: b.disabled }));
+    botoes.forEach((b) => { b.disabled = true; });
+    const alvo = opcoes.botao
+      || overlay.querySelector('.modal-rodape .botao-primario')
+      || overlay.querySelector('.botao-primario');
+    if (alvo) {
+      alvo.classList.add('botao-aguardando');
+      alvo.innerHTML = `<span class="botao-espera" aria-hidden="true"></span> ${rotulo}`;
+    }
+    const corpo = overlay.querySelector('.modal-corpo');
+    if (corpo) corpo.inert = true;
+
+    try {
+      return await fn();
+    } finally {
+      this._ocupado = false;
+      if (this._sobreposicaoAtual === overlay) {
+        overlay.classList.remove('ocupada');
+        overlay.removeAttribute('aria-busy');
+        if (corpo) corpo.inert = false;
+        snapshot.forEach(({ b, html, disabled }) => {
+          b.disabled = disabled;
+          b.innerHTML = html;
+          b.classList.remove('botao-aguardando');
+        });
+      }
     }
   }
 };
@@ -162,15 +204,17 @@ function abrirModalSenhaObrigatoria() {
         if (form.nova_senha.value.length < 8) return mostrar('A nova senha deve ter pelo menos 8 caracteres.');
 
         try {
-          const { usuario } = await api.put('/api/auth/me', {
-            nome: Estado.usuario.nome,
-            login: Estado.usuario.login,
-            senha_atual: form.senha_atual.value,
-            nova_senha: form.nova_senha.value
-          });
-          Estado.usuario = usuario;
-          Modal.fechar();
-          iniciarAppLogado();
+          await Modal.durante('Salvando...', async () => {
+            const { usuario } = await api.put('/api/auth/me', {
+              nome: Estado.usuario.nome,
+              login: Estado.usuario.login,
+              senha_atual: form.senha_atual.value,
+              nova_senha: form.nova_senha.value
+            });
+            Estado.usuario = usuario;
+            Modal.fechar();
+            iniciarAppLogado();
+          }, { botao: modal.querySelector('#botao-definir-senha') });
         } catch (erro) {
           mostrar(erro.message);
         }
@@ -217,10 +261,12 @@ function abrirModalPerfil() {
         }
 
         try {
-          const { usuario } = await api.put('/api/auth/me', { nome, login, senha_atual: senhaAtual || undefined, nova_senha: novaSenha || undefined });
-          Estado.usuario = usuario;
-          atualizarCartaoUsuario();
-          Modal.fechar();
+          await Modal.durante('Salvando...', async () => {
+            const { usuario } = await api.put('/api/auth/me', { nome, login, senha_atual: senhaAtual || undefined, nova_senha: novaSenha || undefined });
+            Estado.usuario = usuario;
+            atualizarCartaoUsuario();
+            Modal.fechar();
+          });
         } catch (erro) {
           el.textContent = erro.message; el.classList.remove('oculto');
         }

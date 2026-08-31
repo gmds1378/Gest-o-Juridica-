@@ -77,6 +77,8 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_processos_mov_tentativa ON processos(mov
 adicionarColunaSeNaoExistir('usuarios', 'email', 'email TEXT');
 adicionarColunaSeNaoExistir('usuarios', 'google_sub', 'google_sub TEXT');
 adicionarColunaSeNaoExistir('usuarios', 'senha_provisoria', 'senha_provisoria INTEGER NOT NULL DEFAULT 0');
+
+adicionarColunaSeNaoExistir('documentos', 'excluido_em', 'excluido_em TEXT');
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_email ON usuarios(email) WHERE email IS NOT NULL');
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_usuarios_google_sub ON usuarios(google_sub) WHERE google_sub IS NOT NULL');
 

@@ -350,10 +350,12 @@ function abrirModalCliente(clienteExistente, aoSalvar) {
         const dados = Object.fromEntries(new FormData(form).entries());
         if (!dados.nome.trim()) return;
         try {
-          if (c.id) await api.put('/api/clientes/' + c.id, dados);
-          else await api.post('/api/clientes', dados);
-          Modal.fechar();
-          aoSalvar();
+          await Modal.durante('Salvando...', async () => {
+            if (c.id) await api.put('/api/clientes/' + c.id, dados);
+            else await api.post('/api/clientes', dados);
+            Modal.fechar();
+            aoSalvar();
+          });
         } catch (erro) {
           const el = modal.querySelector('#erro-cliente');
           el.textContent = erro.message; el.classList.remove('oculto');
@@ -363,9 +365,11 @@ function abrirModalCliente(clienteExistente, aoSalvar) {
       if (botaoExcluir) botaoExcluir.addEventListener('click', async () => {
         if (!confirm('Excluir este cliente? Esta ação não pode ser desfeita.')) return;
         try {
-          await api.del('/api/clientes/' + c.id);
-          Modal.fechar();
-          aoSalvar();
+          await Modal.durante('Excluindo...', async () => {
+            await api.del('/api/clientes/' + c.id);
+            Modal.fechar();
+            aoSalvar();
+          }, { botao: botaoExcluir });
         } catch (erro) {
           const el = modal.querySelector('#erro-cliente');
           el.textContent = erro.message; el.classList.remove('oculto');
@@ -439,7 +443,11 @@ async function abrirModalProcesso(processoExistente, aoSalvar) {
         const nome = modal.querySelector('#nova-etiqueta-nome').value.trim();
         const cor = modal.querySelector('#nova-etiqueta-cor').value;
         if (!nome) return;
-        const { etiqueta } = await api.post('/api/etiquetas', { nome, cor });
+        const resultado = await Modal.durante('Salvando...', async () => {
+          return api.post('/api/etiquetas', { nome, cor });
+        }, { botao: modal.querySelector('#botao-add-etiqueta') });
+        if (!resultado || !resultado.etiqueta) return;
+        const { etiqueta } = resultado;
         const area = modal.querySelector('#area-etiquetas');
         const vazio = area.querySelector('span');
         if (vazio) vazio.remove();
@@ -461,10 +469,12 @@ async function abrirModalProcesso(processoExistente, aoSalvar) {
         }
         dados.etiquetas = Array.from(modal.querySelectorAll('#area-etiquetas input:checked')).map((i) => parseInt(i.value, 10));
         try {
-          if (p.id) await api.put('/api/processos/' + p.id, dados);
-          else await api.post('/api/processos', dados);
-          Modal.fechar();
-          aoSalvar();
+          await Modal.durante('Salvando...', async () => {
+            if (p.id) await api.put('/api/processos/' + p.id, dados);
+            else await api.post('/api/processos', dados);
+            Modal.fechar();
+            aoSalvar();
+          });
         } catch (erro) {
           const el = modal.querySelector('#erro-processo');
           el.textContent = erro.message; el.classList.remove('oculto');
@@ -474,9 +484,11 @@ async function abrirModalProcesso(processoExistente, aoSalvar) {
       const botaoExcluir = modal.querySelector('#botao-excluir-processo');
       if (botaoExcluir) botaoExcluir.addEventListener('click', async () => {
         if (!confirm('Excluir este processo? Documentos, prazos e anotações vinculados perderão a referência.')) return;
-        await api.del('/api/processos/' + p.id);
-        Modal.fechar();
-        Roteador.irPara('processos');
+        await Modal.durante('Excluindo...', async () => {
+          await api.del('/api/processos/' + p.id);
+          Modal.fechar();
+          Roteador.irPara('processos');
+        }, { botao: botaoExcluir });
       });
     }
   });

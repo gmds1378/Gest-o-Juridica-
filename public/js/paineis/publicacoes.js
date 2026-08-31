@@ -276,9 +276,11 @@ async function abrirModalConfiguracoes() {
         const resultadoEl = modal.querySelector('#resultado-teste-aasp');
         if (!chave) { resultadoEl.textContent = 'Cole a chave para testar.'; resultadoEl.className = 'campo-erro'; return; }
         try {
-          const r = await api.post('/api/configuracoes/aasp/testar', { chave });
-          resultadoEl.textContent = `✓ Conexão OK — ${r.pendentes} dia(s) com publicações pendentes nos últimos 30 dias.`;
-          resultadoEl.className = 'selo selo-sucesso';
+          await Modal.durante('Testando...', async () => {
+            const r = await api.post('/api/configuracoes/aasp/testar', { chave });
+            resultadoEl.textContent = `✓ Conexão OK — ${r.pendentes} dia(s) com publicações pendentes nos últimos 30 dias.`;
+            resultadoEl.className = 'selo selo-sucesso';
+          }, { botao: modal.querySelector('#botao-testar-aasp') });
         } catch (erro) {
           resultadoEl.textContent = '✕ ' + erro.message;
           resultadoEl.className = 'campo-erro';
@@ -289,8 +291,10 @@ async function abrirModalConfiguracoes() {
         const el = modal.querySelector('#erro-config-aasp');
         if (!chave) { el.textContent = 'Cole a chave da API.'; el.classList.remove('oculto'); return; }
         try {
-          await api.put('/api/configuracoes/aasp', { chave });
-          Modal.fechar();
+          await Modal.durante('Salvando...', async () => {
+            await api.put('/api/configuracoes/aasp', { chave });
+            Modal.fechar();
+          }, { botao: modal.querySelector('#botao-salvar-aasp') });
         } catch (erro) {
           el.textContent = erro.message; el.classList.remove('oculto');
         }
@@ -298,8 +302,10 @@ async function abrirModalConfiguracoes() {
       const botaoRemoverAasp = modal.querySelector('#botao-remover-aasp');
       if (botaoRemoverAasp) botaoRemoverAasp.addEventListener('click', async () => {
         if (!confirm('Remover a integração? A busca automática de publicações será desativada.')) return;
-        await api.del('/api/configuracoes/aasp');
-        Modal.fechar();
+        await Modal.durante('Removendo...', async () => {
+          await api.del('/api/configuracoes/aasp');
+          Modal.fechar();
+        }, { botao: botaoRemoverAasp });
       });
 
       modal.querySelector('#botao-testar-datajud').addEventListener('click', async () => {
@@ -307,9 +313,11 @@ async function abrirModalConfiguracoes() {
         const resultadoEl = modal.querySelector('#resultado-teste-datajud');
         if (!chave) { resultadoEl.textContent = 'Cole a chave para testar.'; resultadoEl.className = 'campo-erro'; return; }
         try {
-          await api.post('/api/configuracoes/datajud/testar', { chave });
-          resultadoEl.textContent = '✓ Conexão OK com o DataJud.';
-          resultadoEl.className = 'selo selo-sucesso';
+          await Modal.durante('Testando...', async () => {
+            await api.post('/api/configuracoes/datajud/testar', { chave });
+            resultadoEl.textContent = '✓ Conexão OK com o DataJud.';
+            resultadoEl.className = 'selo selo-sucesso';
+          }, { botao: modal.querySelector('#botao-testar-datajud') });
         } catch (erro) {
           resultadoEl.textContent = '✕ ' + erro.message;
           resultadoEl.className = 'campo-erro';
@@ -320,8 +328,10 @@ async function abrirModalConfiguracoes() {
         const el = modal.querySelector('#erro-config-datajud');
         if (!chave) { el.textContent = 'Cole a chave da API.'; el.classList.remove('oculto'); return; }
         try {
-          await api.put('/api/configuracoes/datajud', { chave });
-          Modal.fechar();
+          await Modal.durante('Salvando...', async () => {
+            await api.put('/api/configuracoes/datajud', { chave });
+            Modal.fechar();
+          }, { botao: modal.querySelector('#botao-salvar-datajud') });
         } catch (erro) {
           el.textContent = erro.message; el.classList.remove('oculto');
         }
@@ -329,8 +339,10 @@ async function abrirModalConfiguracoes() {
       const botaoRemoverDatajud = modal.querySelector('#botao-remover-datajud');
       if (botaoRemoverDatajud) botaoRemoverDatajud.addEventListener('click', async () => {
         if (!confirm('Remover a integração? O acompanhamento automático de movimentações será desativado.')) return;
-        await api.del('/api/configuracoes/datajud');
-        Modal.fechar();
+        await Modal.durante('Removendo...', async () => {
+          await api.del('/api/configuracoes/datajud');
+          Modal.fechar();
+        }, { botao: botaoRemoverDatajud });
       });
 
       // --- Groq (resumo com IA) ---
@@ -339,9 +351,11 @@ async function abrirModalConfiguracoes() {
         const resultadoEl = modal.querySelector('#resultado-teste-groq');
         if (!chave) { resultadoEl.textContent = 'Cole a chave para testar.'; resultadoEl.className = 'campo-erro'; return; }
         try {
-          await api.post('/api/configuracoes/groq/testar', { chave });
-          resultadoEl.textContent = '✓ Conexão OK.';
-          resultadoEl.className = 'selo selo-sucesso';
+          await Modal.durante('Testando...', async () => {
+            await api.post('/api/configuracoes/groq/testar', { chave });
+            resultadoEl.textContent = '✓ Conexão OK.';
+            resultadoEl.className = 'selo selo-sucesso';
+          }, { botao: modal.querySelector('#botao-testar-groq') });
         } catch (erro) {
           resultadoEl.textContent = '✕ ' + erro.message;
           resultadoEl.className = 'campo-erro';
@@ -352,8 +366,10 @@ async function abrirModalConfiguracoes() {
         const el = modal.querySelector('#erro-config-groq');
         if (!chave) { el.textContent = 'Cole a chave da API.'; el.classList.remove('oculto'); return; }
         try {
-          await api.put('/api/configuracoes/groq', { chave });
-          Modal.fechar();
+          await Modal.durante('Salvando...', async () => {
+            await api.put('/api/configuracoes/groq', { chave });
+            Modal.fechar();
+          }, { botao: modal.querySelector('#botao-salvar-groq') });
         } catch (erro) {
           el.textContent = erro.message; el.classList.remove('oculto');
         }
@@ -361,8 +377,10 @@ async function abrirModalConfiguracoes() {
       const botaoRemoverGroq = modal.querySelector('#botao-remover-groq');
       if (botaoRemoverGroq) botaoRemoverGroq.addEventListener('click', async () => {
         if (!confirm('Remover a integração? O resumo automático com IA será desativado.')) return;
-        await api.del('/api/configuracoes/groq');
-        Modal.fechar();
+        await Modal.durante('Removendo...', async () => {
+          await api.del('/api/configuracoes/groq');
+          Modal.fechar();
+        }, { botao: botaoRemoverGroq });
       });
     }
   });
@@ -430,16 +448,18 @@ function abrirModalCriarProcesso(publicacao, aoConcluir) {
           el.textContent = 'Informe o nome do cliente.'; el.classList.remove('oculto'); return;
         }
         try {
-          const resultado = await api.post('/api/publicacoes/' + publicacao.id + '/criar-processo', dados);
-          Modal.fechar();
-          if (resultado.vinculado) {
-            alert('Já existia um processo com este número — a publicação foi vinculada a ele.');
-          } else if (resultado.clienteReaproveitado) {
-            alert('Processo cadastrado, reaproveitando o cliente já existente.');
-          } else {
-            alert('Processo e cliente cadastrados com sucesso.');
-          }
-          if (typeof aoConcluir === 'function') aoConcluir();
+          await Modal.durante('Cadastrando...', async () => {
+            const resultado = await api.post('/api/publicacoes/' + publicacao.id + '/criar-processo', dados);
+            Modal.fechar();
+            if (resultado.vinculado) {
+              alert('Já existia um processo com este número — a publicação foi vinculada a ele.');
+            } else if (resultado.clienteReaproveitado) {
+              alert('Processo cadastrado, reaproveitando o cliente já existente.');
+            } else {
+              alert('Processo e cliente cadastrados com sucesso.');
+            }
+            if (typeof aoConcluir === 'function') aoConcluir();
+          });
         } catch (erro) {
           el.textContent = erro.message; el.classList.remove('oculto');
         }

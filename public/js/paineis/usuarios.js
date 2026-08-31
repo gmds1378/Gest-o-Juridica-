@@ -187,15 +187,17 @@ function abrirModalUsuario(usuario, aoConcluir) {
         const dados = Object.fromEntries(new FormData(form).entries());
 
         try {
-          if (editando) {
-            await api.put(`/api/usuarios/${usuario.id}`, dados);
-            Modal.fechar();
-            if (typeof aoConcluir === 'function') aoConcluir();
-          } else {
-            const { senhaProvisoria } = await api.post('/api/usuarios', dados);
-            Modal.fechar();
-            mostrarSenhaGerada(dados.nome, senhaProvisoria, aoConcluir);
-          }
+          await Modal.durante(editando ? 'Salvando...' : 'Criando...', async () => {
+            if (editando) {
+              await api.put(`/api/usuarios/${usuario.id}`, dados);
+              Modal.fechar();
+              if (typeof aoConcluir === 'function') aoConcluir();
+            } else {
+              const { senhaProvisoria } = await api.post('/api/usuarios', dados);
+              Modal.fechar();
+              mostrarSenhaGerada(dados.nome, senhaProvisoria, aoConcluir);
+            }
+          });
         } catch (erro) {
           el.textContent = erro.message;
           el.classList.remove('oculto');

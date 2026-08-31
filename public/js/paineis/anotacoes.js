@@ -95,10 +95,12 @@ async function abrirModalAnotacao(anotacaoExistente, contextoPadrao, aoSalvar) {
           return;
         }
         try {
-          if (anotacaoExistente && anotacaoExistente.id) await api.put('/api/anotacoes/' + anotacaoExistente.id, dados);
-          else await api.post('/api/anotacoes', dados);
-          Modal.fechar();
-          aoSalvar();
+          await Modal.durante('Salvando...', async () => {
+            if (anotacaoExistente && anotacaoExistente.id) await api.put('/api/anotacoes/' + anotacaoExistente.id, dados);
+            else await api.post('/api/anotacoes', dados);
+            Modal.fechar();
+            aoSalvar();
+          });
         } catch (erro) {
           const el = modal.querySelector('#erro-anotacao');
           el.textContent = erro.message; el.classList.remove('oculto');
@@ -107,9 +109,11 @@ async function abrirModalAnotacao(anotacaoExistente, contextoPadrao, aoSalvar) {
       const botaoExcluir = modal.querySelector('#botao-excluir-anotacao');
       if (botaoExcluir) botaoExcluir.addEventListener('click', async () => {
         if (!confirm('Excluir esta anotação?')) return;
-        await api.del('/api/anotacoes/' + anotacaoExistente.id);
-        Modal.fechar();
-        aoSalvar();
+        await Modal.durante('Excluindo...', async () => {
+          await api.del('/api/anotacoes/' + anotacaoExistente.id);
+          Modal.fechar();
+          aoSalvar();
+        }, { botao: botaoExcluir });
       });
     }
   });

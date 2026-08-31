@@ -150,10 +150,12 @@ async function abrirModalModelo(modeloExistente, aoSalvar) {
         if (arquivo) dados.append('arquivo', arquivo);
 
         try {
-          if (m.id) await api.put('/api/modelos/' + m.id, dados);
-          else await api.post('/api/modelos', dados);
-          Modal.fechar();
-          aoSalvar();
+          await Modal.durante(arquivo ? 'Enviando...' : 'Salvando...', async () => {
+            if (m.id) await api.put('/api/modelos/' + m.id, dados);
+            else await api.post('/api/modelos', dados);
+            Modal.fechar();
+            aoSalvar();
+          });
         } catch (erro) {
           el.textContent = erro.message; el.classList.remove('oculto');
         }
@@ -162,9 +164,15 @@ async function abrirModalModelo(modeloExistente, aoSalvar) {
       const botaoExcluir = modal.querySelector('#botao-excluir-modelo');
       if (botaoExcluir) botaoExcluir.addEventListener('click', async () => {
         if (!confirm('Excluir este modelo? O arquivo enviado também será removido.')) return;
-        await api.del('/api/modelos/' + m.id);
-        Modal.fechar();
-        aoSalvar();
+        try {
+          await Modal.durante('Excluindo...', async () => {
+            await api.del('/api/modelos/' + m.id);
+            Modal.fechar();
+            aoSalvar();
+          }, { botao: botaoExcluir });
+        } catch (erro) {
+          alert(erro.message);
+        }
       });
 
       const botaoUsar = modal.querySelector('#botao-usar-modelo');

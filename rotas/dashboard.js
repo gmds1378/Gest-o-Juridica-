@@ -32,7 +32,7 @@ router.get('/', (req, res) => {
     ORDER BY u.nome
   `).all();
 
-  const totalDocumentos = db.prepare('SELECT COUNT(*) AS total FROM documentos').get().total;
+  const totalDocumentos = db.prepare('SELECT COUNT(*) AS total FROM documentos WHERE excluido_em IS NULL').get().total;
   const totalModelos = db.prepare('SELECT COUNT(*) AS total FROM modelos').get().total;
   const totalProcessosAtivos = db.prepare("SELECT COUNT(*) AS total FROM processos WHERE status = 'ativo'").get().total;
   const totalClientes = db.prepare('SELECT COUNT(*) AS total FROM clientes').get().total;

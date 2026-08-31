@@ -232,10 +232,12 @@ async function abrirModalPrazo(prazoExistente, contextoPadrao, aoSalvar) {
           return;
         }
         try {
-          if (prazoExistente && prazoExistente.id) await api.put('/api/prazos/' + prazoExistente.id, dados);
-          else await api.post('/api/prazos', dados);
-          Modal.fechar();
-          aoSalvar();
+          await Modal.durante('Salvando...', async () => {
+            if (prazoExistente && prazoExistente.id) await api.put('/api/prazos/' + prazoExistente.id, dados);
+            else await api.post('/api/prazos', dados);
+            Modal.fechar();
+            aoSalvar();
+          });
         } catch (erro) {
           const el = modal.querySelector('#erro-prazo');
           el.textContent = erro.message; el.classList.remove('oculto');
@@ -244,9 +246,11 @@ async function abrirModalPrazo(prazoExistente, contextoPadrao, aoSalvar) {
       const botaoExcluir = modal.querySelector('#botao-excluir-prazo');
       if (botaoExcluir) botaoExcluir.addEventListener('click', async () => {
         if (!confirm('Excluir este prazo?')) return;
-        await api.del('/api/prazos/' + prazoExistente.id);
-        Modal.fechar();
-        aoSalvar();
+        await Modal.durante('Excluindo...', async () => {
+          await api.del('/api/prazos/' + prazoExistente.id);
+          Modal.fechar();
+          aoSalvar();
+        }, { botao: botaoExcluir });
       });
     }
   });
@@ -286,9 +290,11 @@ async function abrirModalFeriados() {
 
         modal.querySelectorAll('[data-remover-feriado]').forEach((b) => {
           b.addEventListener('click', async () => {
-            await api.del('/api/feriados/' + b.dataset.removerFeriado);
-            const { feriados } = await api.get('/api/feriados');
-            renderLista(feriados);
+            await Modal.durante('Excluindo...', async () => {
+              await api.del('/api/feriados/' + b.dataset.removerFeriado);
+              const { feriados } = await api.get('/api/feriados');
+              renderLista(feriados);
+            }, { botao: b });
           });
         });
       };
@@ -299,10 +305,12 @@ async function abrirModalFeriados() {
         const descricao = modal.querySelector('#novo-feriado-desc').value.trim();
         const abrangencia = modal.querySelector('#novo-feriado-abrangencia').value;
         if (!data || !descricao) return;
-        await api.post('/api/feriados', { data, descricao, abrangencia });
-        modal.querySelector('#novo-feriado-desc').value = '';
-        const { feriados } = await api.get('/api/feriados');
-        renderLista(feriados);
+        await Modal.durante('Salvando...', async () => {
+          await api.post('/api/feriados', { data, descricao, abrangencia });
+          modal.querySelector('#novo-feriado-desc').value = '';
+          const { feriados } = await api.get('/api/feriados');
+          renderLista(feriados);
+        }, { botao: modal.querySelector('#botao-add-feriado') });
       });
     }
   });

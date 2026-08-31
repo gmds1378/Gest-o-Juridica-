@@ -12,7 +12,8 @@ Não é mais um sistema “100% local”. Integrações externas:
 | API pública DataJud (CNJ) | Só se `DATAJUD_API_KEY` (ou chave no banco) estiver configurada | Número CNJ consultado; recebe metadados e movimentações públicas |
 | Groq (resumo com IA) | Não | Texto da publicação, para gerar o resumo |
 | Login com Google | Não (código pronto, credenciais ainda não) | E-mail da conta Google na autenticação |
-| Backup no Google Drive | Não (cron local existe; Drive ainda não) | Cópia do banco e dos uploads, quando o rclone for ligado |
+| Backup no Google Drive | Sim (rclone + cron 03:00) | Cópia do banco e dos modelos na pasta `BackupGestaoJuridica` |
+| Acervo de documentos | Sim (rclone) | Arquivo original na pasta `AcervoDocumentos` (lixeira 60 dias se excluir no site) |
 
 Sem essas chaves, o restante do sistema funciona só com login e senha.
 
@@ -111,8 +112,7 @@ Processos e clientes, modelos, documentos, agenda/prazos (calculadora em dias ú
 
 ## 8. Ainda falta (produção)
 
-- Ligar o **rclone → Google Drive** (a conta do escritório ainda não existe). Até lá o backup diário das 3h não sai da VM.
-- Testar **restauração** de um backup completo.
+- Testar **restauração** de um backup completo (`restaurar.sh`).
 - Credenciais **Google OAuth** (o botão só aparece com `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e `GOOGLE_REDIRECT_URI` no env).
 - Cadastrar as demais pessoas no menu Usuários.
 - Groq, se quiserem resumo automático.

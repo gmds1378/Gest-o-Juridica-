@@ -309,6 +309,19 @@ table.tabela tr.clicavel:hover { background: var(--cor-superficie-alt); }
 .modal-cabecalho h2 { font-size: 17px; }
 .modal-corpo { padding: 20px; max-height: 72vh; overflow-y: auto; }
 .modal-rodape { padding: 14px 20px; border-top: 1px solid var(--cor-borda); display: flex; justify-content: flex-end; gap: 8px; }
+.sobreposicao.ocupada { cursor: wait; }
+.botao.botao-aguardando:disabled { opacity: 1; cursor: wait; }
+.botao-espera {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: botao-espera-girar .6s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes botao-espera-girar { to { transform: rotate(360deg); } }
 
 /* ---------- Abas ---------- */
 .abas { display: flex; gap: 4px; border-bottom: 1px solid var(--cor-borda); margin-bottom: 18px; }

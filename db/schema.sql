@@ -147,13 +147,14 @@ CREATE TABLE IF NOT EXISTS documentos (
   id                INTEGER PRIMARY KEY AUTOINCREMENT,
   titulo            TEXT NOT NULL,
   nome_arquivo      TEXT NOT NULL DEFAULT '',
-  caminho_arquivo   TEXT NOT NULL DEFAULT '',   -- nome do arquivo salvo em uploads/documentos/
+  caminho_arquivo   TEXT NOT NULL DEFAULT '',   -- nome interno (Drive ou uploads/documentos/)
   tamanho_bytes     INTEGER NOT NULL DEFAULT 0,
   tipo_mime         TEXT NOT NULL DEFAULT '',
   processo_id       INTEGER REFERENCES processos(id) ON DELETE SET NULL,
   cliente_id        INTEGER REFERENCES clientes(id) ON DELETE SET NULL,
   modelo_origem_id  INTEGER REFERENCES modelos(id) ON DELETE SET NULL,
   link_drive        TEXT,                 -- link do arquivo no Google Drive (opcional)
+  excluido_em       TEXT,                 -- soft delete: some da lista; arquivo na lixeira 60 dias
   criado_por        INTEGER REFERENCES usuarios(id),
   criado_em         TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
   atualizado_em     TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))

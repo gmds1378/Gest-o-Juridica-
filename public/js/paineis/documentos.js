@@ -8,7 +8,7 @@ async function renderizarDocumentos(container) {
     <div class="cabecalho-pagina">
       <div>
         <h1>Documentos</h1>
-        <div class="subtitulo">Arquivos locais vinculáveis a um processo — envie, baixe e edite offline no Word</div>
+        <div class="subtitulo">Arquivos no Google Drive, vinculados a um processo — envie pelo sistema e baixe para editar no Word</div>
       </div>
       <button class="botao botao-primario" id="botao-novo-documento">+ Novo documento</button>
     </div>
@@ -139,11 +139,14 @@ async function abrirModalDocumento(documentoExistente, contextoPadrao, aoSalvar)
         if (modeloOrigemId) dados.append('modelo_origem_id', modeloOrigemId);
         if (arquivo) dados.append('arquivo', arquivo);
 
+        const rotulo = arquivo ? 'Enviando ao Drive...' : 'Salvando...';
         try {
-          if (d.id) await api.put('/api/documentos/' + d.id, dados);
-          else await api.post('/api/documentos', dados);
-          Modal.fechar();
-          aoSalvar();
+          await Modal.durante(rotulo, async () => {
+            if (d.id) await api.put('/api/documentos/' + d.id, dados);
+            else await api.post('/api/documentos', dados);
+            Modal.fechar();
+            aoSalvar();
+          }, { botao: modal.querySelector('#botao-salvar-documento') });
         } catch (erro) {
           el.textContent = erro.message; el.classList.remove('oculto');
         }
@@ -151,10 +154,17 @@ async function abrirModalDocumento(documentoExistente, contextoPadrao, aoSalvar)
 
       const botaoExcluir = modal.querySelector('#botao-excluir-documento');
       if (botaoExcluir) botaoExcluir.addEventListener('click', async () => {
-        if (!confirm('Excluir este documento? O arquivo enviado também será removido.')) return;
-        await api.del('/api/documentos/' + d.id);
-        Modal.fechar();
-        aoSalvar();
+        if (!confirm('Excluir este documento da lista? O arquivo fica 60 dias na lixeira do Drive e só então é apagado de vez.')) return;
+        const el = modal.querySelector('#erro-documento');
+        try {
+          await Modal.durante('Excluindo...', async () => {
+            await api.del('/api/documentos/' + d.id);
+            Modal.fechar();
+            aoSalvar();
+          }, { botao: botaoExcluir });
+        } catch (erro) {
+          el.textContent = erro.message; el.classList.remove('oculto');
+        }
       });
     }
   });

@@ -14,13 +14,17 @@ PROJETO="${PROJETO:-/opt/gestao-juridica}"
 PASTA_BACKUP="${PASTA_BACKUP:-$PROJETO/backups}"
 ARQUIVO_ENV="${ARQUIVO_ENV:-/etc/gestao-juridica.env}"
 
-# RCLONE_DESTINO e BACKUP_RETENCAO_DIAS vem do arquivo de ambiente.
-if [ -f "$ARQUIVO_ENV" ]; then
+# RCLONE_DESTINO e BACKUP_RETENCAO_DIAS vem do arquivo de ambiente, se o
+# usuario de backup puder le-lo. O cron tambem pode exportar essas variaveis
+# (o env de producao costuma ser 600, so root).
+if [ -r "$ARQUIVO_ENV" ]; then
 	# shellcheck disable=SC1090
 	set -a; source "$ARQUIVO_ENV"; set +a
 fi
 
 RETENCAO="${BACKUP_RETENCAO_DIAS:-30}"
+# O usuario de servico nao tem home; o rclone.conf fica em arquivo de sistema.
+export RCLONE_CONFIG="${RCLONE_CONFIG:-/etc/rclone-gestao.conf}"
 DATA="$(date +%Y-%m-%d_%H%M)"
 DESTINO="$PASTA_BACKUP/$DATA"
 
@@ -65,9 +69,28 @@ if [ -n "${RCLONE_DESTINO:-}" ] && command -v rclone >/dev/null 2>&1; then
 
 	rclone delete "$RCLONE_DESTINO" --min-age "${RETENCAO}d" --quiet || true
 	rclone rmdirs "$RCLONE_DESTINO" --leave-root --quiet || true
-	echo "  retencao remota aplicada (${RETENCAO} dias)"
+  echo "  retencao remota aplicada (${RETENCAO} dias)"
 else
 	echo "  AVISO: rclone nao configurado - o backup existe apenas nesta maquina."
+fi
+
+# --- Lixeira do acervo (60 dias) -----------------------------------------
+# Soft delete no site move o arquivo para AcervoDocumentos/lixeira. Aqui
+# apaga de vez o que passou de 60 dias, e some o registro no banco.
+ACERVO="${RCLONE_ACERVO:-gdrive:AcervoDocumentos}"
+if command -v rclone >/dev/null 2>&1; then
+	rclone delete "$ACERVO/lixeira" --min-age 60d --quiet || true
+	rclone rmdirs "$ACERVO/lixeira" --leave-root --quiet || true
+fi
+LIXEIRA_LOCAL="$PROJETO/uploads/documentos/lixeira"
+if [ -d "$LIXEIRA_LOCAL" ]; then
+	find "$LIXEIRA_LOCAL" -type f -mtime +60 -delete 2>/dev/null || true
+fi
+if command -v sqlite3 >/dev/null 2>&1; then
+	sqlite3 "$PROJETO/dados/escritorio.db" \
+		"DELETE FROM documentos WHERE excluido_em IS NOT NULL AND excluido_em <= datetime('now','localtime','-60 days');" \
+		|| true
+	echo "  lixeira do acervo: arquivos com mais de 60 dias removidos"
 fi
 
 # --- Limpeza local --------------------------------------------------------

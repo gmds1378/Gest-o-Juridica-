@@ -57,7 +57,7 @@ router.get('/:id', (req, res) => {
 router.get('/:id/documentos', (req, res) => {
   const documentos = db.prepare(`
     SELECT id, titulo, nome_arquivo, tamanho_bytes, link_drive, criado_em, atualizado_em
-    FROM documentos WHERE processo_id = ? ORDER BY atualizado_em DESC
+    FROM documentos WHERE processo_id = ? AND excluido_em IS NULL ORDER BY atualizado_em DESC
   `).all(req.params.id);
   res.json({ documentos });
 });

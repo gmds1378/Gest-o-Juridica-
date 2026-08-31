@@ -18,7 +18,7 @@ router.get('/', (req, res) => {
   `).all(termo, termo, termo);
 
   const documentos = db.prepare(`
-    SELECT id, titulo FROM documentos WHERE titulo LIKE ? OR nome_arquivo LIKE ? LIMIT 10
+    SELECT id, titulo FROM documentos WHERE excluido_em IS NULL AND (titulo LIKE ? OR nome_arquivo LIKE ?) LIMIT 10
   `).all(termo, termo);
 
   const anotacoes = db.prepare(`

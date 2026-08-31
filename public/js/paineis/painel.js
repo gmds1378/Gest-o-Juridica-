@@ -284,11 +284,13 @@ function abrirModalAtalho(atalhoExistente) {
         const url = form.url.value.trim();
         if (!titulo || !url) { el.textContent = 'Preencha o título e o link.'; el.classList.remove('oculto'); return; }
         try {
-          if (a.id) await api.put('/api/atalhos/' + a.id, { titulo, url });
-          else await api.post('/api/atalhos', { titulo, url });
-          _dadosPainel.atalhos = (await api.get('/api/atalhos')).atalhos;
-          renderizarWidgets();
-          Modal.fechar();
+          await Modal.durante(a.id ? 'Salvando...' : 'Adicionando...', async () => {
+            if (a.id) await api.put('/api/atalhos/' + a.id, { titulo, url });
+            else await api.post('/api/atalhos', { titulo, url });
+            _dadosPainel.atalhos = (await api.get('/api/atalhos')).atalhos;
+            renderizarWidgets();
+            Modal.fechar();
+          });
         } catch (erro) {
           el.textContent = erro.message; el.classList.remove('oculto');
         }
@@ -296,10 +298,12 @@ function abrirModalAtalho(atalhoExistente) {
       const botaoExcluir = modal.querySelector('#botao-excluir-atalho');
       if (botaoExcluir) botaoExcluir.addEventListener('click', async () => {
         if (!confirm('Remover este link?')) return;
-        await api.del('/api/atalhos/' + a.id);
-        _dadosPainel.atalhos = (await api.get('/api/atalhos')).atalhos;
-        renderizarWidgets();
-        Modal.fechar();
+        await Modal.durante('Excluindo...', async () => {
+          await api.del('/api/atalhos/' + a.id);
+          _dadosPainel.atalhos = (await api.get('/api/atalhos')).atalhos;
+          renderizarWidgets();
+          Modal.fechar();
+        }, { botao: botaoExcluir });
       });
     }
   });

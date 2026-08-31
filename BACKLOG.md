@@ -21,7 +21,9 @@ copiado na mão (scp / `implantacao/instalar.sh`).
 - [ ] **Domínio próprio** — apontar um subdomínio (ex. `sistema.seudominio.com.br`)
       para `147.15.66.219`, uma linha no Caddyfile, o Caddy emite o certificado.
       Atualizar o redirect URI do Google. Sessões caem (cookie do domínio).
-- [ ] **Backup no Drive** — rclone + teste de `restaurar.sh` (já no plano de publicação).
+- [x] **Backup no Drive** — rclone ligado (pasta `BackupGestaoJuridica`).
+- [x] **Acervo de documentos no Drive** — pasta `AcervoDocumentos`; exclusão no site = lixeira 60 dias.
+- [ ] Teste de `restaurar.sh`.
 - [ ] **Dependabot** — PRs automáticos de `npm` (express, multer, groq-sdk).
 
 ## Infra e “coisas que sempre quis testar”

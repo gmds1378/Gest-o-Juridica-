@@ -1,12 +1,14 @@
-// CRUD de documentos (arquivo local, ex.: .docx) - podem ser enviados diretamente
-// ou criados a partir de um Modelo (o arquivo do modelo e copiado como ponto de partida).
+// CRUD de documentos. O arquivo vive no Google Drive (acervo); o SQLite
+// guarda titulo, vinculos e o nome interno. Excluir no site e soft delete
+// (lixeira 60 dias). Sem rclone configurado, cai para disco local.
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const express = require('express');
 const db = require('../db/conexao');
-const { uploadDocumento, caminhoAbsoluto, removerArquivo } = require('../middleware/upload');
+const { uploadDocumento, caminhoAbsoluto } = require('../middleware/upload');
 const auditoria = require('../servicos/auditoria');
+const acervo = require('../servicos/acervoDocumentos');
 
 const router = express.Router();
 
@@ -20,10 +22,15 @@ const SELECT_DOCUMENTO = `
   LEFT JOIN usuarios u ON u.id = d.criado_por
 `;
 
-// GET /api/documentos?q=&processoId=
+const ATIVO = ' AND d.excluido_em IS NULL';
+
+function documentoAtivo(id) {
+  return db.prepare('SELECT * FROM documentos WHERE id = ? AND excluido_em IS NULL').get(id);
+}
+
 router.get('/', (req, res) => {
   const { q, processoId } = req.query;
-  let sql = SELECT_DOCUMENTO + ' WHERE 1=1';
+  let sql = SELECT_DOCUMENTO + ' WHERE d.excluido_em IS NULL';
   const params = [];
   if (processoId) { sql += ' AND d.processo_id = ?'; params.push(processoId); }
   if (q) { sql += ' AND d.titulo LIKE ?'; params.push(`%${q}%`); }
@@ -31,21 +38,28 @@ router.get('/', (req, res) => {
   res.json({ documentos: db.prepare(sql).all(...params) });
 });
 
-// GET /api/documentos/:id
 router.get('/:id', (req, res) => {
-  const documento = db.prepare(SELECT_DOCUMENTO + ' WHERE d.id = ?').get(req.params.id);
+  const documento = db.prepare(SELECT_DOCUMENTO + ' WHERE d.id = ?' + ATIVO).get(req.params.id);
   if (!documento) return res.status(404).json({ erro: 'Documento nao encontrado.' });
   res.json({ documento });
 });
 
-// GET /api/documentos/:id/arquivo - baixa o arquivo
 router.get('/:id/arquivo', (req, res) => {
-  const documento = db.prepare('SELECT * FROM documentos WHERE id = ?').get(req.params.id);
+  const documento = documentoAtivo(req.params.id);
   if (!documento || !documento.caminho_arquivo) return res.status(404).json({ erro: 'Arquivo nao encontrado.' });
-  res.download(caminhoAbsoluto('documentos', documento.caminho_arquivo), documento.nome_arquivo);
+  try {
+    const arquivo = acervo.materializar(documento.caminho_arquivo);
+    res.download(arquivo.caminho, documento.nome_arquivo, () => {
+      if (arquivo.temporario) fs.unlink(arquivo.caminho, () => {});
+    });
+  } catch (erro) {
+    const status = erro.status || 500;
+    if (status < 500) return res.status(status).json({ erro: erro.message });
+    console.error('[Acervo] download:', erro.message);
+    res.status(503).json({ erro: 'Nao foi possivel baixar o arquivo no Drive. Tente de novo em instantes.' });
+  }
 });
 
-// Copia o arquivo de um modelo para uploads/documentos/, retornando os metadados do novo arquivo
 function clonarArquivoDeModelo(modeloId) {
   const modelo = db.prepare('SELECT * FROM modelos WHERE id = ?').get(modeloId);
   if (!modelo || !modelo.caminho_arquivo) return null;
@@ -65,8 +79,6 @@ function clonarArquivoDeModelo(modeloId) {
   };
 }
 
-// POST /api/documentos (multipart/form-data: titulo, processo_id, cliente_id, link_drive,
-// modelo_origem_id (opcional), arquivo (obrigatorio se nao vier modelo_origem_id))
 router.post('/', uploadDocumento.single('arquivo'), (req, res) => {
   const { titulo, processo_id, cliente_id, link_drive, modelo_origem_id } = req.body || {};
   if (!titulo || !titulo.trim()) return res.status(400).json({ erro: 'Informe o titulo do documento.' });
@@ -82,6 +94,16 @@ router.post('/', uploadDocumento.single('arquivo'), (req, res) => {
 
   if (!arquivo) return res.status(400).json({ erro: 'Envie um arquivo ou selecione um modelo de origem.' });
 
+  try {
+    acervo.persistir(caminhoAbsoluto('documentos', arquivo.caminho_arquivo), arquivo.caminho_arquivo);
+  } catch (erro) {
+    fs.unlink(caminhoAbsoluto('documentos', arquivo.caminho_arquivo), () => {});
+    const status = erro.status || 503;
+    return res.status(status).json({
+      erro: status < 500 ? erro.message : 'Nao foi possivel gravar o arquivo no Drive. Tente de novo.'
+    });
+  }
+
   const resultado = db.prepare(`
     INSERT INTO documentos (titulo, nome_arquivo, caminho_arquivo, tamanho_bytes, tipo_mime,
       processo_id, cliente_id, modelo_origem_id, link_drive, criado_por)
@@ -94,16 +116,26 @@ router.post('/', uploadDocumento.single('arquivo'), (req, res) => {
   res.status(201).json({ documento });
 });
 
-// PUT /api/documentos/:id (multipart/form-data: titulo, processo_id, cliente_id, link_drive, arquivo opcional)
 router.put('/:id', uploadDocumento.single('arquivo'), (req, res) => {
-  const existente = db.prepare('SELECT * FROM documentos WHERE id = ?').get(req.params.id);
+  const existente = documentoAtivo(req.params.id);
   if (!existente) return res.status(404).json({ erro: 'Documento nao encontrado.' });
 
   const { titulo, processo_id, cliente_id, link_drive } = req.body || {};
   if (!titulo || !titulo.trim()) return res.status(400).json({ erro: 'Informe o titulo do documento.' });
 
   if (req.file) {
-    removerArquivo('documentos', existente.caminho_arquivo);
+    try {
+      acervo.persistir(caminhoAbsoluto('documentos', req.file.filename), req.file.filename);
+    } catch (erro) {
+      fs.unlink(caminhoAbsoluto('documentos', req.file.filename), () => {});
+      const status = erro.status || 503;
+      return res.status(status).json({
+        erro: status < 500 ? erro.message : 'Nao foi possivel gravar o arquivo no Drive. Tente de novo.'
+      });
+    }
+    try { acervo.paraLixeira(existente.caminho_arquivo); } catch (erro) {
+      console.error('[Acervo] lixeira (substituicao):', erro.message);
+    }
     db.prepare(`
       UPDATE documentos SET titulo = ?, nome_arquivo = ?, caminho_arquivo = ?, tamanho_bytes = ?, tipo_mime = ?,
         processo_id = ?, cliente_id = ?, link_drive = ?, atualizado_em = datetime('now', 'localtime')
@@ -126,13 +158,22 @@ router.put('/:id', uploadDocumento.single('arquivo'), (req, res) => {
   res.json({ documento });
 });
 
-// DELETE /api/documentos/:id
 router.delete('/:id', (req, res) => {
-  const existente = db.prepare('SELECT * FROM documentos WHERE id = ?').get(req.params.id);
+  const existente = documentoAtivo(req.params.id);
   if (!existente) return res.status(404).json({ erro: 'Documento nao encontrado.' });
-  db.prepare('DELETE FROM documentos WHERE id = ?').run(req.params.id);
-  removerArquivo('documentos', existente.caminho_arquivo);
-  auditoria.registrar(req, { acao: 'excluiu', entidade: 'documentos', entidadeId: existente.id, descricao: `"${existente.titulo}" (${existente.nome_arquivo})` });
+  try {
+    acervo.paraLixeira(existente.caminho_arquivo);
+  } catch (erro) {
+    const status = erro.status || 503;
+    return res.status(status).json({
+      erro: 'Nao foi possivel mover o arquivo para a lixeira do Drive. Tente de novo.'
+    });
+  }
+  db.prepare(`
+    UPDATE documentos SET excluido_em = datetime('now', 'localtime'),
+      atualizado_em = datetime('now', 'localtime') WHERE id = ?
+  `).run(req.params.id);
+  auditoria.registrar(req, { acao: 'excluiu', entidade: 'documentos', entidadeId: existente.id, descricao: `"${existente.titulo}" (${existente.nome_arquivo}) — lixeira 60 dias` });
   res.json({ ok: true });
 });
 
