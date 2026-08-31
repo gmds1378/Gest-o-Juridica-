@@ -2,6 +2,7 @@
 const express = require('express');
 const db = require('../db/conexao');
 const { uploadModelo, caminhoAbsoluto, removerArquivo } = require('../middleware/upload');
+const auditoria = require('../servicos/auditoria');
 
 const router = express.Router();
 
@@ -75,6 +76,7 @@ router.post('/', uploadModelo.single('arquivo'), (req, res) => {
     req.file.size, req.file.mimetype, req.session.usuario.id);
 
   const modelo = db.prepare(SELECT_MODELO + ' WHERE m.id = ?').get(resultado.lastInsertRowid);
+  auditoria.registrar(req, { acao: 'criou', entidade: 'modelos', entidadeId: modelo.id, descricao: `Modelo "${modelo.titulo}"` });
   res.status(201).json({ modelo });
 });
 
@@ -102,6 +104,10 @@ router.put('/:id', uploadModelo.single('arquivo'), (req, res) => {
   }
 
   const modelo = db.prepare(SELECT_MODELO + ' WHERE m.id = ?').get(req.params.id);
+  auditoria.registrar(req, {
+    acao: 'alterou', entidade: 'modelos', entidadeId: modelo.id,
+    descricao: req.file ? `Modelo "${modelo.titulo}" - arquivo substituído` : `Modelo "${modelo.titulo}"`
+  });
   res.json({ modelo });
 });
 
@@ -111,6 +117,7 @@ router.delete('/:id', (req, res) => {
   if (!existente) return res.status(404).json({ erro: 'Modelo nao encontrado.' });
   db.prepare('DELETE FROM modelos WHERE id = ?').run(req.params.id);
   removerArquivo('modelos', existente.caminho_arquivo);
+  auditoria.registrar(req, { acao: 'excluiu', entidade: 'modelos', entidadeId: existente.id, descricao: `Modelo "${existente.titulo}"` });
   res.json({ ok: true });
 });
 

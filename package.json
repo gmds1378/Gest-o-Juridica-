@@ -5,7 +5,11 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "seed": "node db/seed.js"
+    "seed": "node db/seed.js",
+    "reimportar-aasp": "node db/reimportar-aasp.js",
+    "resetar-senha": "node db/resetar-senha.js",
+    "backup": "bash implantacao/backup.sh",
+    "test": "node --test testes/*.test.js"
   },
   "license": "UNLICENSED",
   "private": true,
@@ -15,8 +19,10 @@
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.6.2",
     "express-session": "^1.18.0",
     "groq-sdk": "^1.5.0",
+    "helmet": "^8.3.0",
     "multer": "^2.0.0"
   }
 }

@@ -58,9 +58,20 @@ async function renderizarPublicacoes(container) {
     botao.textContent = 'Buscando...';
     try {
       const resultado = await api.post('/api/publicacoes/sincronizar');
-      alert(resultado.novas > 0
-        ? `${resultado.novas} publicação(ões) nova(s) encontrada(s).`
-        : 'Nenhuma publicação nova no momento.');
+      const falhas = resultado.diasComFalha || [];
+      if (falhas.length) {
+        // Publicacao baixada da AASP nao volta numa consulta futura, entao uma
+        // falha de gravacao precisa ser visivel na hora, nao so no log.
+        alert(
+          `${resultado.novas} publicação(ões) nova(s) importada(s), mas ${falhas.length} dia(s) falharam ao gravar: ` +
+          `${falhas.map((f) => f.dia).join(', ')}.\n\n` +
+          'Os dados foram salvos em disco e não se perderam. Avise o suporte para rodar a reimportação.'
+        );
+      } else {
+        alert(resultado.novas > 0
+          ? `${resultado.novas} publicação(ões) nova(s) encontrada(s).`
+          : 'Nenhuma publicação nova no momento.');
+      }
       renderizarPublicacoes(container);
     } catch (erro) {
       alert('Não foi possível buscar publicações: ' + erro.message);
@@ -189,16 +200,18 @@ function montarListaPublicacoes(container, publicacoesTodas) {
 // =======================================================================
 // Modal: configurações de integração (somente administrador)
 // - API de Intimações (AASP): busca as publicações
+// - DataJud/CNJ: andamento processual
 // - Resumo com IA (Groq, gratuito): resume o texto de cada publicação
 // =======================================================================
 async function abrirModalConfiguracoes() {
-  const [aasp, groq] = await Promise.all([
+  const [aasp, groq, datajud] = await Promise.all([
     api.get('/api/configuracoes/aasp'),
-    api.get('/api/configuracoes/groq')
+    api.get('/api/configuracoes/groq'),
+    api.get('/api/configuracoes/datajud')
   ]);
 
   Modal.abrir({
-    titulo: 'Configurações de Publicações',
+    titulo: 'Configurações de integrações',
     largo: true,
     corpoHtml: `
       <h2 style="font-size:15px;">API de Intimações (AASP)</h2>
@@ -215,6 +228,25 @@ async function abrirModalConfiguracoes() {
           ${aasp.configurada ? '<button class="botao botao-perigo botao-pequeno" id="botao-remover-aasp" type="button" style="margin-right:auto;">Remover</button>' : ''}
           <button class="botao botao-pequeno" id="botao-testar-aasp" type="button">Testar conexão</button>
           <button class="botao botao-primario botao-pequeno" id="botao-salvar-aasp" type="button">Salvar</button>
+        </div>
+      </form>
+
+      <hr style="border:none; border-top:1px solid var(--cor-borda); margin:18px 0;">
+
+      <h2 style="font-size:15px;">Andamento processual (DataJud / CNJ)</h2>
+      <p class="texto-suave texto-pequeno">Consulta movimentações dos processos cadastrados. A chave pública está na wiki do DataJud (CNJ). Não mistura com as intimações da AASP.</p>
+      <form id="form-config-datajud">
+        <div class="campo">
+          <label>Chave da API</label>
+          <input type="text" name="chave" placeholder="${datajud.configurada ? datajud.chaveMascarada : 'Cole aqui a chave pública do DataJud'}">
+          <div class="campo-ajuda">${datajud.configurada ? 'Uma chave já está configurada. Deixe em branco para mantê-la, ou cole uma nova para substituir.' : 'Authorization: APIKey … — copie a chave pública da documentação do CNJ.'}</div>
+        </div>
+        <div id="resultado-teste-datajud" class="oculto" style="margin-bottom:10px;"></div>
+        <div id="erro-config-datajud" class="campo-erro oculto"></div>
+        <div class="flex gap-8" style="margin-bottom:8px;">
+          ${datajud.configurada ? '<button class="botao botao-perigo botao-pequeno" id="botao-remover-datajud" type="button" style="margin-right:auto;">Remover</button>' : ''}
+          <button class="botao botao-pequeno" id="botao-testar-datajud" type="button">Testar conexão</button>
+          <button class="botao botao-primario botao-pequeno" id="botao-salvar-datajud" type="button">Salvar</button>
         </div>
       </form>
 
@@ -267,6 +299,37 @@ async function abrirModalConfiguracoes() {
       if (botaoRemoverAasp) botaoRemoverAasp.addEventListener('click', async () => {
         if (!confirm('Remover a integração? A busca automática de publicações será desativada.')) return;
         await api.del('/api/configuracoes/aasp');
+        Modal.fechar();
+      });
+
+      modal.querySelector('#botao-testar-datajud').addEventListener('click', async () => {
+        const chave = modal.querySelector('#form-config-datajud [name="chave"]').value.trim();
+        const resultadoEl = modal.querySelector('#resultado-teste-datajud');
+        if (!chave) { resultadoEl.textContent = 'Cole a chave para testar.'; resultadoEl.className = 'campo-erro'; return; }
+        try {
+          await api.post('/api/configuracoes/datajud/testar', { chave });
+          resultadoEl.textContent = '✓ Conexão OK com o DataJud.';
+          resultadoEl.className = 'selo selo-sucesso';
+        } catch (erro) {
+          resultadoEl.textContent = '✕ ' + erro.message;
+          resultadoEl.className = 'campo-erro';
+        }
+      });
+      modal.querySelector('#botao-salvar-datajud').addEventListener('click', async () => {
+        const chave = modal.querySelector('#form-config-datajud [name="chave"]').value.trim();
+        const el = modal.querySelector('#erro-config-datajud');
+        if (!chave) { el.textContent = 'Cole a chave da API.'; el.classList.remove('oculto'); return; }
+        try {
+          await api.put('/api/configuracoes/datajud', { chave });
+          Modal.fechar();
+        } catch (erro) {
+          el.textContent = erro.message; el.classList.remove('oculto');
+        }
+      });
+      const botaoRemoverDatajud = modal.querySelector('#botao-remover-datajud');
+      if (botaoRemoverDatajud) botaoRemoverDatajud.addEventListener('click', async () => {
+        if (!confirm('Remover a integração? O acompanhamento automático de movimentações será desativado.')) return;
+        await api.del('/api/configuracoes/datajud');
         Modal.fechar();
       });
 

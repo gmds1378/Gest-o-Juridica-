@@ -1,0 +1,38 @@
+# Caddy: HTTPS automatico + proxy reverso para o Node.
+#
+# Instalar:
+#   sudo cp implantacao/Caddyfile /etc/caddy/Caddyfile
+#   sudo nano /etc/caddy/Caddyfile      # trocar SEUNOME e o e-mail
+#   sudo systemctl reload caddy
+#
+# O certificado e emitido e renovado sozinho pelo Let's Encrypt, pelo desafio
+# HTTP - por isso as portas 80 e 443 precisam estar abertas. A porta 80 nao
+# serve o site: ela existe para a validacao do certificado, e o Caddy redireciona
+# todo o trafego dela para HTTPS automaticamente.
+
+{
+	# Recebe aviso do Let's Encrypt se algo impedir a renovacao do certificado.
+	email SEU-EMAIL@exemplo.com
+}
+
+SEUNOME.duckdns.org {
+	# Os arquivos estaticos tambem passam por aqui; quem serve tudo e o Node.
+	reverse_proxy localhost:3000
+
+	encode gzip zstd
+
+	# Log de acesso, util para investigar um acesso indevido depois.
+	log {
+		output file /var/log/caddy/gestao-juridica.log {
+			roll_size 10mb
+			roll_keep 10
+		}
+	}
+
+	# O restante dos cabecalhos de seguranca vem do helmet, na aplicacao.
+	# HSTS fica aqui porque so faz sentido na camada que termina o TLS.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+}

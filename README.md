@@ -1,250 +1,141 @@
-# Sistema de Gestão Jurídica (uso local / rede do escritório)
+# Sistema de Gestão Jurídica
 
-Aplicação web para um escritório pequeno (3 usuários), 100% local — não envia
-dados para nenhum serviço externo. Backend em **Node.js + Express**, banco de
-dados **SQLite** (arquivo único, persistente), frontend em **HTML/CSS/JS puro**
-(sem build, sem framework).
+Aplicação web para escritório pequeno (até ~8 pessoas). Backend **Node.js + Express**, banco **SQLite**, frontend **HTML/CSS/JS** (sem build).
 
-## 1. Pré-requisitos
+**Produção:** [https://roseniadv.duckdns.org](https://roseniadv.duckdns.org) — VM Ubuntu na Oracle Cloud (São Paulo), HTTPS pelo Caddy, fuso `America/Sao_Paulo`.
 
-Instale o **Node.js versão 22.5 ou superior** (o sistema foi testado com a
-versão 24) no computador que vai funcionar como servidor (pode ser qualquer
-um dos 3 computadores, ou um computador dedicado):
+Não é mais um sistema “100% local”. Integrações externas:
 
-- Baixe em: https://nodejs.org
-- O banco de dados usa o módulo `node:sqlite`, embutido no próprio Node.js a
-  partir da versão 22.5 — não é necessário instalar Python, Visual Studio
-  Build Tools nem nenhuma ferramenta de compilação nativa. `npm install` só
-  baixa pacotes 100% em JavaScript.
-- Após instalar, confirme abrindo um terminal (PowerShell) e rodando:
-  ```
-  node -v
-  npm -v
-  ```
+| Integração | Obrigatória? | O que sai do escritório |
+|---|---|---|
+| API de Intimações da AASP | Só se a chave estiver configurada | Metadados e texto das intimações, para importar |
+| API pública DataJud (CNJ) | Só se `DATAJUD_API_KEY` (ou chave no banco) estiver configurada | Número CNJ consultado; recebe metadados e movimentações públicas |
+| Groq (resumo com IA) | Não | Texto da publicação, para gerar o resumo |
+| Login com Google | Não (código pronto, credenciais ainda não) | E-mail da conta Google na autenticação |
+| Backup no Google Drive | Não (cron local existe; Drive ainda não) | Cópia do banco e dos uploads, quando o rclone for ligado |
 
-## 2. Instalação (rodar uma única vez)
+Sem essas chaves, o restante do sistema funciona só com login e senha.
 
-**Forma fácil:** dê dois cliques em [instalar.bat](instalar.bat). Uma janela
-preta abre, instala tudo e cria o banco de dados sozinha.
+## 1. Produção (já no ar)
 
-**Forma manual (terminal):**
+- Endereço: `https://roseniadv.duckdns.org`
+- Conta só quem o administrador cria (menu **Usuários**). Não há cadastro público.
+- Monitoramento: UptimeRobot em `https://roseniadv.duckdns.org/health`
+- Máquina: Oracle Always Free, formato `VM.Standard.E2.1.Micro` (Ampere estava sem vaga em São Paulo)
+- Serviço: `systemd` (`gestao-juridica`), arquivos em `/opt/gestao-juridica`, ambiente em `/etc/gestao-juridica.env`
+- Reinstalação numa VM Ubuntu: `sudo bash implantacao/instalar.sh <dominio> <email>`
 
-```powershell
+O seed cria **um** administrador (`admin`) com senha aleatória, exibida **uma vez** no terminal, e marcada como provisória (troca obrigatória no primeiro acesso). Não use senha `1234`.
+
+Feriados 2026–2027 já entram no seed: nacionais, Carnaval/Paixão/Corpus (foro), **20 de setembro (RS)** e **11 de fevereiro — Nossa Senhora de Lourdes (Veranópolis)**. O aniversário da cidade (15/01) não entra como feriado legal; cadastre na Agenda se o fórum fechar nesse dia.
+
+## 2. Desenvolvimento local
+
+Node.js **22.5 ou superior** (`node:sqlite`).
+
+```
 npm install
 npm run seed
-```
-
-- `npm install` baixa as dependências (Express, multer, etc.) — tudo pacotes
-  100% em JavaScript, sem compilação nativa.
-- `npm run seed` cria o banco de dados em `dados/escritorio.db` e os 3
-  usuários iniciais:
-
-| Usuário       | Login      | Senha inicial | Perfil        |
-|---------------|------------|----------------|---------------|
-| Gabriel       | `gabriel`  | `1234`         | Administrador |
-| Roseni        | `roseni`   | `1234`         | Usuária       |
-| Bruna         | `bruna`    | `1234`         | Usuária       |
-
-> Qualquer usuário pode trocar seu próprio nome, login e senha a qualquer
-> momento pelo próprio sistema: clique no seu nome no canto inferior esquerdo
-> do menu → "Meu perfil". Não precisa editar nada por fora.
-
-## 3. Rodando o servidor
-
-**Forma fácil:** dê dois cliques em [iniciar.bat](iniciar.bat). Ele abre uma
-janela do servidor (que precisa ficar aberta) e, depois de alguns segundos,
-abre o navegador sozinho em `http://localhost:3000`.
-
-**Forma manual (terminal):**
-
-```powershell
 npm start
 ```
 
-Você verá algo como:
+Abre em `http://localhost:3000`. Em desenvolvimento o `SESSION_SECRET` é gerado a cada restart (todo mundo desloga). Em produção ele vem de `/etc/gestao-juridica.env` e é obrigatório.
+
+Scripts: `npm run resetar-senha -- <login>`, `npm run reimportar-aasp` (se um dia da AASP gravou o JSON bruto mas falhou no banco).
+
+Os `.bat` (`instalar.bat`, `iniciar.bat`) ainda servem para uso em Windows na rede local.
+
+## 3. Banco e arquivos
+
+Arquivo `dados/escritorio.db` (WAL). Tabelas principais: `usuarios`, `sessoes`, `auditoria`, `clientes`, `processos`, `etiquetas`, `modelos`, `documentos`, `prazos`, `anotacoes`, `feriados`, `publicacoes`, `movimentacoes`, `configuracoes`. Definição em [db/schema.sql](db/schema.sql).
+
+Modelos e documentos são arquivos em `uploads/` (Word etc.), sem editor embutido. JSON bruto da AASP, quando houver busca, fica em `dados/aasp-brutos/`.
+
+## 4. Publicações (AASP)
+
+A cada 4 horas (e no botão **Buscar agora**) o servidor consulta a API da AASP e coloca as intimações numa fila. **Nunca cria prazo sozinho.**
+
+A busca usa `diferencial=true`: o que foi baixado **não volta** numa consulta futura. O código grava o JSON do dia em disco antes de parsear, usa transação, lock contra duas buscas ao mesmo tempo, e timeout na rede. Se a gravação falhar, `npm run reimportar-aasp`.
+
+Primeira sincronização em produção (ago/2026): chave válida, **0** intimações pendentes nos últimos 30 dias (fila da AASP já vazia ou sem publicação nova).
+
+## 5. Andamento processual (DataJud / CNJ)
+
+Consulta periódica à [API pública do DataJud](https://www.cnj.jus.br/sistemas/datajud/api-publica/) para acompanhar **movimentações** dos processos cadastrados. Não mistura com a AASP:
+
+| Fonte | Para quê |
+|---|---|
+| AASP | Intimações/publicações (fila em Publicações) |
+| DataJud | Andamento/movimentações do processo (aba Andamento) |
+
+O aplicativo **não** usa a chave no JavaScript público: o admin cola no modal (como a AASP); a API só devolve a chave mascarada. Consultas ao DataJud saem só do backend.
+
+**Limitação:** o DataJud é fonte de metadados e movimentações, **não é tempo real**. Uma movimentação pode existir no tribunal antes de aparecer no DataJud.
+
+### Configuração
+
+- **Publicações → Configurações** (só administrador): cole a chave pública do DataJud, teste e salve. Fica no banco (`configuracoes.datajud_chave`), no mesmo lugar da AASP e da Groq.
+- Opcional: `DATAJUD_API_KEY` no ambiente, usada só se ainda não houver chave no banco.
+- Rate limit oficial do termo de uso: no máximo **120 req/min**. O sistema usa `DATAJUD_MAX_REQ_POR_MINUTO` (padrão 60) e espera entre processos do lote.
+
+### Job
+
+- Frequência: cerca de **1 vez por dia** (`DATAJUD_INTERVALO_MS`, padrão 24h).
+- Primeira execução **1 hora após o processo subir** (não no deploy/boot), depois o intervalo.
+- Só processos **ativos** com número CNJ. Lote (`DATAJUD_LOTE`, padrão 20). Falha em um processo não para os demais.
+- Tribunal sai do próprio número CNJ (segmentos J.TR) → alias `api_publica_tjsp`, `api_publica_tjrs`, `api_publica_trf4`, etc. Estaduais, TRFs, TRTs, TREs, superiores e TJMs mapeados em `servicos/datajudTribunais.js`.
+
+### Sync manual
+
+No detalhe do processo: **Atualizar andamento**. Ou `POST /api/processos/:id/sincronizar-movimentacoes` (usuário logado). Mesma rotina do cron.
+
+### Deduplicação e primeira sync
+
+Fingerprint SHA-256 de código + data/hora + nome + complementos, único por `(processo_id, origem, fingerprint)`. `INSERT OR IGNORE` + UNIQUE no SQLite.
+
+A **primeira** sincronização importa o histórico (`historico_inicial`) e **não** dispara o sino. Só movimentação **nova** depois disso vira alerta (“Nova movimentação no processo …”).
+
+### Arquitetura (provedor)
+
+`servicos/movimentacoes.js` depende de um provedor (`consultarProcesso`), hoje só o DataJud (`servicos/datajudProvedor.js`). Troca futura: `MOVIMENTACAO_PROVEDOR=tribunal_direto` quando esse módulo existir. Pipeline: provedor → DTO → fingerprint → banco → sino.
+
+Testes (API mockada, sem chamar o CNJ): `npm test`.
+
+## 6. Resumo com IA (Groq)
+
+Opcional, chave em Publicações → Configurações ([console.groq.com/keys](https://console.groq.com/keys)). O texto vai para a Groq. Modelos `openai/gpt-oss-120b` e reserva `openai/gpt-oss-20b`. Sem chave, as publicações funcionam sem resumo.
+
+## 7. O que o sistema faz
+
+Processos e clientes, modelos, documentos, agenda/prazos (calculadora em dias úteis com feriados), anotações, painel reorganizável, busca, alertas (prazos e movimentações novas), publicações AASP, andamento DataJud, usuários (só admin), auditoria (só admin), perfil próprio.
+
+## 8. Ainda falta (produção)
+
+- Ligar o **rclone → Google Drive** (a conta do escritório ainda não existe). Até lá o backup diário das 3h não sai da VM.
+- Testar **restauração** de um backup completo.
+- Credenciais **Google OAuth** (o botão só aparece com `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e `GOOGLE_REDIRECT_URI` no env).
+- Cadastrar as demais pessoas no menu Usuários.
+- Groq, se quiserem resumo automático.
+
+### [BACKLOG] Captura direta de movimentações nos tribunais
+
+Implementar um novo provedor (`ProcessMovementProvider` / `consultarProcesso`) capaz de consultar diretamente PJe, e-SAJ, eproc, Projudi e demais fontes oficiais, permitindo atualização mais rápida do que a sincronização via DataJud. A implementação deverá ser modular por sistema/tribunal e reutilizar o pipeline existente de normalização, deduplicação, persistência e notificações.
+
+Motivação: o DataJud depende do envio dos tribunais e pode atrasar. Captura direta (APIs oficiais, certificado, credenciais — **sem scraping agora**) se pareceria mais com Astrea/Escavador. Não implementar nesta versão.
+
+Troca futura do DuckDNS pelo domínio do escritório: apontar o DNS, uma linha no Caddyfile, atualizar o redirect URI do Google; as sessões caem porque o cookie é do domínio.
+
+## 9. Estrutura
 
 ```
-Sistema de Gestao Juridica rodando.
-- Neste computador:  http://localhost:3000
-- Na rede local:     http://<IP-DESTE-PC>:3000
+server.js                 Express, sessão, helmet, /health, jobs AASP e DataJud
+db/                       schema, conexão (exige TZ America/Sao_Paulo), seed
+middleware/               login, admin, upload, store de sessão no SQLite
+servicos/                 AASP, DataJud/movimentações, Groq, auditoria
+rotas/                    API REST em /api/...
+testes/                   node --test (DataJud mockado)
+implantacao/              instalar.sh, Caddyfile, systemd, backup.sh, restaurar.sh
+public/                   frontend estático
+dados/                    banco (não vai para o git)
+uploads/                  arquivos enviados (não vão para o git)
 ```
-
-Deixe esse terminal aberto — é ele quem mantém o servidor (e o banco de
-dados) rodando. Se fechar a janela, o sistema para de responder para todo
-mundo na rede.
-
-### Acessando dos outros 2 computadores
-
-1. No computador que está rodando o servidor, descubra o IP local (PowerShell: `ipconfig`, veja "Endereço IPv4", algo como `192.168.0.15`).
-2. Nos outros computadores (mesma rede Wi-Fi/cabo), abra o navegador em:
-   `http://192.168.0.15:3000` (troque pelo IP real).
-3. Dica: no Windows, se o navegador não conectar, confirme que o Firewall do
-   Windows não está bloqueando a porta 3000 (ele geralmente pergunta na
-   primeira vez que o Node roda — escolha "Permitir acesso" em redes privadas).
-
-### Deixar sempre ligado
-
-Para não precisar abrir o terminal manualmente toda vez, o mais simples é
-deixar o computador-servidor ligado com o terminal rodando `npm start` em
-segundo plano, ou (mais avançado) instalar o pacote `pm2` /  configurar como
-serviço do Windows — posso ajudar com isso depois se fizer sentido para o
-escritório.
-
-## 4. Estrutura do banco de dados (SQLite)
-
-Arquivo único em `dados/escritorio.db` (criado automaticamente). Tabelas
-principais (ver definição completa comentada em [db/schema.sql](db/schema.sql)):
-
-- **usuarios** — login e senha (com hash) dos 3 usuários, perfil (admin/usuario).
-- **clientes** — cadastro de clientes do escritório.
-- **processos** — número CNJ, vara/comarca, parte contrária, área do direito,
-  status, link do tribunal, link da pasta no Drive; vinculado a um cliente.
-- **etiquetas** / **processos_etiquetas** — etiquetas coloridas (N:N com processos).
-- **categorias_modelos** — categorias customizáveis da biblioteca de modelos.
-- **modelos** — peças padrão (procuração, petição inicial, etc.): guarda o
-  *arquivo enviado* (nome original, tamanho, tipo) — o conteúdo em si fica em
-  `uploads/modelos/`, não no banco.
-- **documentos** — arquivos vinculados a um processo/cliente (podem nascer de
-  um modelo, que é copiado como ponto de partida). Arquivo em si fica em
-  `uploads/documentos/`. O compartilhamento entre os 3 computadores é feito
-  pelo próprio envio/download no sistema — não depende de link do Drive.
-- **prazos** — prazos/compromissos da agenda, com responsável, prioridade e status.
-- **anotacoes** — anotações rápidas, avulsas ou vinculadas a processo/cliente.
-- **feriados** — usados pela calculadora de prazos em dias úteis.
-
-Todas as tabelas são criadas automaticamente na primeira execução (`db/conexao.js`
-executa `db/schema.sql`), então não é preciso rodar nada manualmente além do `seed`.
-
-### Sobre os arquivos de Modelos e Documentos
-
-O sistema **não tem editor de texto embutido**. Em vez disso, você envia um
-arquivo já pronto (ex.: `.docx` feito no Word), o sistema guarda esse arquivo
-em `uploads/`, e qualquer um dos 3 computadores pode baixá-lo, editar no Word
-(inclusive offline) e depois enviar a versão atualizada de volta (substituindo
-o arquivo). Isso vale tanto para a biblioteca de **Modelos** quanto para
-**Documentos** — e ao criar um Documento a partir de um Modelo, o arquivo do
-modelo é copiado como ponto de partida.
-
-## 5. Estrutura do projeto
-
-```
-app/
-├── instalar.bat            Clique duplo: instala tudo (1a vez)
-├── iniciar.bat              Clique duplo: liga o sistema e abre o navegador
-├── server.js               Ponto de entrada do backend (Express + sessão)
-├── db/
-│   ├── schema.sql           Definição de todas as tabelas
-│   ├── conexao.js           Abre o banco e garante que as tabelas existem
-│   └── seed.js              Cria os 3 usuários e categorias padrão
-├── middleware/
-│   ├── autenticacao.js      Middlewares exigirLogin / exigirAdmin
-│   └── upload.js            Configuração do multer (upload de arquivos)
-├── servicos/
-│   └── aaspIntimacoes.js    Integração com a API de Intimações da AASP
-├── rotas/                   Uma rota Express por entidade (API REST em /api/...)
-├── dados/
-│   └── escritorio.db        Banco SQLite (gerado automaticamente)
-├── uploads/
-│   ├── modelos/              Arquivos enviados na biblioteca de Modelos
-│   └── documentos/           Arquivos enviados em Documentos
-└── public/                  Frontend (servido como arquivos estáticos)
-    ├── login.html
-    ├── index.html            Shell do app (sidebar, busca, sino de alertas)
-    ├── css/estilo.css         Tema claro/escuro, todos os estilos
-    └── js/
-        ├── api.js             Wrapper fetch (envia cookies de sessão)
-        ├── roteador.js         Router simples baseado em #/hash
-        ├── app.js              Bootstrap: login, tema, sino, busca global
-        └── paineis/             Uma tela por arquivo (painel, processos, modelos, agenda, documentos, anotacoes)
-```
-
-## 6. O que já está pronto nesta primeira entrega
-
-- Backend completo (autenticação por sessão, todas as rotas REST, upload/download de arquivos).
-- Tela **Processos e Clientes**: lista com busca/filtro, cadastro de cliente,
-  cadastro de processo (com etiquetas coloridas, link do tribunal e link do
-  Drive), e a tela de detalhe com as 4 abas (Detalhes, Documentos, Prazos,
-  Anotações).
-- Tela **Modelos**: categorias customizáveis, upload de arquivo (ex.: .docx),
-  download, substituição do arquivo, "criar documento a partir deste modelo"
-  (copia o arquivo como ponto de partida).
-- Tela **Agenda e Prazos**: calendário mensal, cadastro de prazo com
-  responsável/prioridade, calculadora de prazos (dias úteis/corridos,
-  considerando feriados cadastrados), gestão de feriados.
-- Telas **Painel**, **Documentos** e **Anotações** também implementadas e
-  funcionais (cards de prazos, upload/download de arquivos vinculados a
-  processo, bloco de notas com fixar/buscar), para o sistema já funcionar de
-  ponta a ponta.
-- Busca global, sino de alertas (prazos em até 3 dias) e modo escuro no topo,
-  válidos em todas as telas.
-- **Painel**: blocos reorganizáveis — estatísticas, prazos próximos, prazos
-  por responsável, anotações recentes e **Tribunais e links úteis** (com
-  edição dos links, não só adicionar/remover). Cada bloco pode ser arrastado
-  pela alcinha (⠿) para reordenar e redimensionado (metade/largura total)
-  pelo botão no canto. O arranjo escolhido fica salvo para o escritório todo.
-- **Publicações**: importação automática de intimações via API da AASP (ver
-  seção 8), numa fila de revisão — nunca cria prazo sozinho, sempre com
-  confirmação humana.
-- **Meu perfil**: qualquer usuário troca seu próprio nome, login e senha
-  direto pelo sistema (clique no nome, no canto inferior esquerdo do menu).
-
-## 7. Integração com a API de Intimações da AASP
-
-O sistema busca automaticamente, a cada 4 horas, publicações novas na API de
-Intimações da AASP (associação de advogados) e coloca numa fila de revisão em
-**Publicações**. Ninguém precisa ficar checando o Diário de Justiça manualmente.
-
-- **Configurar**: somente o administrador vê o botão "⚙ Configurar API" na tela
-  Publicações. A chave fica em `intimacaoapi.aasp.org.br`, na área de
-  Intimações do cadastro AASP do escritório.
-- **Como funciona**: o servidor consulta a API, traz as publicações novas, e
-  tenta vincular automaticamente a um processo já cadastrado (pelo número
-  CNJ). O texto da publicação fica disponível para leitura, mas **o sistema
-  nunca calcula ou cria um prazo sozinho** — alguém do escritório revisa e
-  clica em "Criar prazo" (que já abre com o vencimento pronto para usar a
-  calculadora de prazos).
-- **Importante**: cada consulta à API marca as publicações como "baixadas" do
-  lado da AASP — ou seja, não aparecem de novo numa consulta futura. Uma vez
-  importadas, elas ficam guardadas com segurança no banco de dados local.
-- Botão "🔄 Buscar agora" na tela Publicações força uma busca imediata, sem
-  esperar pelo próximo ciclo automático.
-- Quando uma publicação chega sem processo vinculado (número CNJ novo, ainda
-  não cadastrado), o botão **"📎 Cadastrar processo"** cria o processo e o
-  cliente direto a partir dos dados da intimação — o nome do cliente vem
-  pré-preenchido (quando identificável no texto), mas sempre editável antes
-  de confirmar. O sistema verifica duplicidade automaticamente: se já existir
-  um processo com aquele número CNJ ou um cliente com aquele nome, reaproveita
-  em vez de cadastrar de novo.
-- Filtros de **tribunal/jornal** e **ordenação por data** (mais recentes ou
-  mais antigas primeiro), acima da lista.
-
-## 8. Resumo automático com IA (Groq)
-
-Opcional: se o administrador configurar uma chave gratuita da Groq (tela
-Publicações → ⚙ Configurações), toda publicação nova importada ganha
-automaticamente um resumo curto gerado por IA — cobrindo teor da publicação,
-quem está sendo intimado e prazo/data, quando identificáveis — sem precisar
-ler o texto completo. Publicações antigas (sem resumo) têm um botão
-**"🤖 Resumir com IA"** para gerar sob demanda, e um resumo já existente pode
-ser refeito a qualquer momento com **"🔄 Gerar novamente"**.
-
-- Chave gratuita, sem cartão de crédito, em **console.groq.com/keys**.
-- A Groq roda modelos abertos (Llama, GPT-OSS) em hardware próprio de alta
-  velocidade — não é a mesma empresa do Grok (xAI). O texto da publicação é
-  enviado para a Groq processar (diferente da AASP, aqui é conteúdo do
-  processo, não só metadado — por isso essa integração é totalmente opcional).
-- Sem chave configurada, tudo funciona normalmente, só sem os resumos.
-- Usa o modelo `openai/gpt-oss-120b` (melhor qualidade), dentro do plano
-  gratuito: 1.000 requisições e 200 mil tokens por dia. Se a cota de tokens
-  do dia acabar (acontece em dias de importação pesada), o sistema cai
-  automaticamente para o `openai/gpt-oss-20b` como reserva — cota separada,
-  então dobra a margem do dia sem precisar trocar nada manualmente.
-
-## 9. Próximos passos sugeridos
-
-- Trocar as senhas iniciais (ou usar "Meu perfil" para isso).
-- Cadastrar os feriados estaduais/municipais relevantes na Agenda (⚙ Configurar
-  feriados) para a calculadora de prazos ficar precisa.
-- Se quiser, posso automatizar o backup da pasta `dados/` (banco de dados) e
-  `uploads/` (arquivos de Modelos e Documentos) — ex.: copiar para o Google
-  Drive local todo fim de dia.

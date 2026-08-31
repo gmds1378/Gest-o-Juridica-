@@ -1,6 +1,7 @@
 // CRUD de prazos/compromissos (agenda).
 const express = require('express');
 const db = require('../db/conexao');
+const auditoria = require('../servicos/auditoria');
 
 const router = express.Router();
 
@@ -44,6 +45,7 @@ router.post('/', (req, res) => {
     prioridade || 'media', responsavel_id || null, req.session.usuario.id);
 
   const prazo = db.prepare(SELECT_PRAZO + ' WHERE pr.id = ?').get(resultado.lastInsertRowid);
+  auditoria.registrar(req, { acao: 'criou', entidade: 'prazos', entidadeId: prazo.id, descricao: `"${prazo.titulo}" para ${prazo.vencimento}` });
   res.status(201).json({ prazo });
 });
 
@@ -63,6 +65,14 @@ router.put('/:id', (req, res) => {
     prioridade || 'media', responsavel_id || null, concluido ? 1 : 0, req.params.id);
 
   const prazo = db.prepare(SELECT_PRAZO + ' WHERE pr.id = ?').get(req.params.id);
+  // Mudanca de data de prazo e o tipo de alteracao que alguem vai querer rastrear depois.
+  const mudouData = existente.vencimento !== prazo.vencimento;
+  auditoria.registrar(req, {
+    acao: 'alterou', entidade: 'prazos', entidadeId: prazo.id,
+    descricao: mudouData
+      ? `"${prazo.titulo}" - vencimento de ${existente.vencimento} para ${prazo.vencimento}`
+      : `"${prazo.titulo}"`
+  });
   res.json({ prazo });
 });
 
@@ -76,6 +86,10 @@ router.patch('/:id/concluir', (req, res) => {
     .run(novoValor, req.params.id);
 
   const prazo = db.prepare(SELECT_PRAZO + ' WHERE pr.id = ?').get(req.params.id);
+  auditoria.registrar(req, {
+    acao: 'alterou', entidade: 'prazos', entidadeId: prazo.id,
+    descricao: `"${prazo.titulo}" marcado como ${novoValor ? 'concluído' : 'pendente'}`
+  });
   res.json({ prazo });
 });
 
@@ -83,6 +97,10 @@ router.delete('/:id', (req, res) => {
   const existente = db.prepare('SELECT * FROM prazos WHERE id = ?').get(req.params.id);
   if (!existente) return res.status(404).json({ erro: 'Prazo nao encontrado.' });
   db.prepare('DELETE FROM prazos WHERE id = ?').run(req.params.id);
+  auditoria.registrar(req, {
+    acao: 'excluiu', entidade: 'prazos', entidadeId: existente.id,
+    descricao: `"${existente.titulo}" (vencimento ${existente.vencimento})`
+  });
   res.json({ ok: true });
 });
 

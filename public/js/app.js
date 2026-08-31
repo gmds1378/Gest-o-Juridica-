@@ -1,7 +1,7 @@
 // Bootstrap do app: autenticacao, sidebar, tema, sino de alertas e busca global.
 // Tambem expoe utilitarios (Utilidades) e um helper de modal (Modal) usados pelas telas.
 
-const Estado = { usuario: null, usuarios: [] };
+const Estado = { usuario: null, usuarios: [], abaProcesso: 'detalhes' };
 
 const Utilidades = {
   escaparHtml(texto) {
@@ -16,11 +16,18 @@ const Utilidades = {
   },
   formatarDataHora(isoComHora) {
     if (!isoComHora) return '-';
-    const partes = isoComHora.split(' ');
+    const normalizado = String(isoComHora).replace('T', ' ');
+    const partes = normalizado.split(/[ T]/);
     return `${this.formatarData(partes[0])}${partes[1] ? ' ' + partes[1].slice(0, 5) : ''}`;
   },
+  // Data de hoje no fuso do navegador. toISOString() daria a data em UTC,
+  // o que no Brasil vira o dia seguinte a partir das 21h - e "vence hoje"
+  // passaria a apontar para o prazo errado no fim da tarde.
   hojeISO() {
-    return new Date().toISOString().slice(0, 10);
+    const agora = new Date();
+    const mes = String(agora.getMonth() + 1).padStart(2, '0');
+    const dia = String(agora.getDate()).padStart(2, '0');
+    return `${agora.getFullYear()}-${mes}-${dia}`;
   },
   diasEntre(dataIso) {
     const hoje = new Date(this.hojeISO() + 'T00:00:00');
@@ -62,7 +69,7 @@ const Utilidades = {
 const Modal = {
   _sobreposicaoAtual: null,
 
-  abrir({ titulo, corpoHtml, rodapeHtml = '', largo = false, aoMontar = null }) {
+  abrir({ titulo, corpoHtml, rodapeHtml = '', largo = false, aoMontar = null, obrigatorio = false }) {
     this.fechar();
 
     const sobreposicao = document.createElement('div');
@@ -71,7 +78,7 @@ const Modal = {
       <div class="modal ${largo ? 'modal-largo' : ''}">
         <div class="modal-cabecalho">
           <h2>${titulo}</h2>
-          <button class="botao botao-icone" data-fechar-modal>✕</button>
+          ${obrigatorio ? '' : '<button class="botao botao-icone" data-fechar-modal>✕</button>'}
         </div>
         <div class="modal-corpo">${corpoHtml}</div>
         ${rodapeHtml ? `<div class="modal-rodape">${rodapeHtml}</div>` : ''}
@@ -79,6 +86,7 @@ const Modal = {
     `;
 
     sobreposicao.addEventListener('click', (evento) => {
+      if (obrigatorio) return;
       if (evento.target === sobreposicao || evento.target.closest('[data-fechar-modal]')) {
         this.fechar();
       }
@@ -111,6 +119,64 @@ function atualizarCartaoUsuario() {
   const avatar = document.getElementById('avatar-usuario');
   avatar.textContent = Estado.usuario.nome.charAt(0).toUpperCase();
   avatar.style.background = Estado.usuario.cor || '#334155';
+}
+
+// Troca obrigatoria da senha provisoria. O servidor ja recusa qualquer outra
+// rota nessa situacao (middleware/autenticacao.js) - esta tela existe para a
+// pessoa entender o que precisa fazer, e nao pode ser fechada sem concluir.
+function abrirModalSenhaObrigatoria() {
+  Modal.abrir({
+    titulo: 'Defina sua senha',
+    obrigatorio: true,
+    corpoHtml: `
+      <div class="aviso-bloqueio">
+        Sua senha atual é provisória e foi definida por outra pessoa. Escolha uma
+        senha só sua para liberar o acesso ao sistema.
+      </div>
+      <form id="form-senha-obrigatoria">
+        <div class="campo"><label>Senha provisória (a que você acabou de usar) *</label>
+          <input type="password" name="senha_atual" autocomplete="current-password" autofocus></div>
+        <div class="campo"><label>Nova senha *</label>
+          <input type="password" name="nova_senha" autocomplete="new-password">
+          <div class="campo-ajuda">Mínimo de 8 caracteres.</div>
+        </div>
+        <div class="campo"><label>Confirmar nova senha *</label>
+          <input type="password" name="confirmar" autocomplete="new-password"></div>
+        <div id="erro-senha-obrigatoria" class="campo-erro oculto"></div>
+      </form>`,
+    rodapeHtml: `
+      <button class="botao" id="botao-sair-senha" type="button">Sair</button>
+      <button class="botao botao-primario" id="botao-definir-senha" type="button">Definir senha e entrar</button>`,
+    aoMontar: (modal) => {
+      modal.querySelector('#botao-sair-senha').addEventListener('click', async () => {
+        await api.post('/api/auth/logout');
+        window.location.href = '/login.html';
+      });
+
+      modal.querySelector('#botao-definir-senha').addEventListener('click', async () => {
+        const form = modal.querySelector('#form-senha-obrigatoria');
+        const el = modal.querySelector('#erro-senha-obrigatoria');
+        const mostrar = (texto) => { el.textContent = texto; el.classList.remove('oculto'); };
+
+        if (form.nova_senha.value !== form.confirmar.value) return mostrar('A confirmação não confere com a nova senha.');
+        if (form.nova_senha.value.length < 8) return mostrar('A nova senha deve ter pelo menos 8 caracteres.');
+
+        try {
+          const { usuario } = await api.put('/api/auth/me', {
+            nome: Estado.usuario.nome,
+            login: Estado.usuario.login,
+            senha_atual: form.senha_atual.value,
+            nova_senha: form.nova_senha.value
+          });
+          Estado.usuario = usuario;
+          Modal.fechar();
+          iniciarAppLogado();
+        } catch (erro) {
+          mostrar(erro.message);
+        }
+      });
+    }
+  });
 }
 
 function abrirModalPerfil() {
@@ -194,12 +260,25 @@ async function atualizarSino() {
 
     lista.innerHTML = alertas.length
       ? alertas.map((a) => {
+          if (a.tipo === 'movimentacao') {
+            return `<div class="item" data-ir-processo="${a.processo_id}" style="cursor:pointer;">
+              <strong>Nova movimentação no processo ${Utilidades.escaparHtml(a.numero_cnj || '')}</strong><br>
+              <span class="texto-suave">${Utilidades.escaparHtml(a.titulo)}${a.ocorrido_em ? ' · ' + Utilidades.formatarDataHora(a.ocorrido_em) : ''}</span></div>`;
+          }
           const dias = Utilidades.diasEntre(a.vencimento);
           const urgencia = dias < 0 ? 'Atrasado' : dias === 0 ? 'Vence hoje' : `Vence em ${dias} dia(s)`;
           return `<div class="item"><strong>${Utilidades.escaparHtml(a.titulo)}</strong><br>
             <span class="texto-suave">${urgencia} · ${Utilidades.formatarData(a.vencimento)}${a.responsavel_nome ? ' · ' + Utilidades.escaparHtml(a.responsavel_nome) : ''}</span></div>`;
         }).join('')
-      : '<div class="item texto-suave">Nenhum prazo urgente.</div>';
+      : '<div class="item texto-suave">Nenhum prazo urgente nem movimentação nova.</div>';
+
+    lista.querySelectorAll('[data-ir-processo]').forEach((el) => {
+      el.addEventListener('click', () => {
+        Estado.abaProcesso = 'movimentacoes';
+        document.getElementById('painel-alertas').classList.add('oculto');
+        Roteador.irPara('processos/' + el.dataset.irProcesso);
+      });
+    });
   } catch (e) { /* silencioso: nao interrompe o uso do app */ }
 }
 
@@ -290,6 +369,38 @@ function montarIconesEstaticos() {
   document.getElementById('icone-sino').innerHTML = Icone('sino', 18);
 }
 
+// Itens de menu visiveis so para o administrador. Sao apenas atalhos - o
+// controle de acesso de verdade esta nas rotas do servidor.
+function montarMenuAdministracao() {
+  if (Estado.usuario.perfil !== 'admin') return;
+  const navegacao = document.getElementById('navegacao');
+  navegacao.insertAdjacentHTML('beforeend', `
+    <a href="#/usuarios" data-rota="usuarios"><span class="icone" data-icone="pessoas"></span> Usuários</a>
+    <a href="#/auditoria" data-rota="auditoria"><span class="icone" data-icone="historico"></span> Auditoria</a>
+  `);
+  navegacao.querySelectorAll('[data-icone]').forEach((span) => {
+    if (!span.innerHTML) span.innerHTML = Icone(span.dataset.icone, 17);
+  });
+}
+
+// Parte do bootstrap que so faz sentido com o acesso ja liberado (ou seja,
+// depois da troca da senha provisoria, se houver).
+async function iniciarAppLogado() {
+  try {
+    const { usuarios } = await api.get('/api/auth/usuarios');
+    Estado.usuarios = usuarios;
+  } catch (e) { Estado.usuarios = []; }
+
+  montarMenuAdministracao();
+  iniciarBuscaGlobal();
+  atualizarSino();
+  atualizarBadgePublicacoes();
+  setInterval(atualizarSino, 5 * 60 * 1000);
+  setInterval(atualizarBadgePublicacoes, 5 * 60 * 1000);
+
+  Roteador.navegar();
+}
+
 async function iniciar() {
   montarIconesEstaticos();
   aplicarTemaSalvo();
@@ -301,11 +412,6 @@ async function iniciar() {
     window.location.href = '/login.html';
     return;
   }
-
-  try {
-    const { usuarios } = await api.get('/api/auth/usuarios');
-    Estado.usuarios = usuarios;
-  } catch (e) { Estado.usuarios = []; }
 
   atualizarCartaoUsuario();
   document.getElementById('botao-meu-perfil').addEventListener('click', abrirModalPerfil);
@@ -327,13 +433,16 @@ async function iniciar() {
     if (!evento.target.closest('.sino-wrap')) painelAlertas.classList.add('oculto');
   });
 
-  iniciarBuscaGlobal();
-  atualizarSino();
-  atualizarBadgePublicacoes();
-  setInterval(atualizarSino, 5 * 60 * 1000);
-  setInterval(atualizarBadgePublicacoes, 5 * 60 * 1000);
+  // Com senha provisoria o servidor recusa todas as demais rotas, entao nem
+  // adianta montar o resto do app antes de resolver isso.
+  if (Estado.usuario.senha_provisoria) {
+    document.getElementById('conteudo-pagina').innerHTML =
+      '<div class="estado-vazio">Defina sua senha para começar.</div>';
+    abrirModalSenhaObrigatoria();
+    return;
+  }
 
-  Roteador.navegar();
+  iniciarAppLogado();
 }
 
 document.addEventListener('DOMContentLoaded', iniciar);

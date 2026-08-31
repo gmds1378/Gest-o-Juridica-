@@ -9,6 +9,15 @@ uploads/**
 !uploads/**/
 !uploads/**/.gitkeep
 
+# Variaveis de ambiente com segredos (o modelo versionado e o .env.exemplo)
+.env
+.env.local
+*.env
+!.env.exemplo
+
+# Backups gerados localmente antes do envio ao Drive
+backups/
+
 # Logs e afins
 npm-debug.log*
 *.log

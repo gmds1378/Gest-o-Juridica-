@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const express = require('express');
 const db = require('../db/conexao');
 const { uploadDocumento, caminhoAbsoluto, removerArquivo } = require('../middleware/upload');
+const auditoria = require('../servicos/auditoria');
 
 const router = express.Router();
 
@@ -89,6 +90,7 @@ router.post('/', uploadDocumento.single('arquivo'), (req, res) => {
     processo_id || null, cliente_id || null, modelo_origem_id || null, link_drive || null, req.session.usuario.id);
 
   const documento = db.prepare(SELECT_DOCUMENTO + ' WHERE d.id = ?').get(resultado.lastInsertRowid);
+  auditoria.registrar(req, { acao: 'criou', entidade: 'documentos', entidadeId: documento.id, descricao: `"${documento.titulo}" (${documento.nome_arquivo})` });
   res.status(201).json({ documento });
 });
 
@@ -117,6 +119,10 @@ router.put('/:id', uploadDocumento.single('arquivo'), (req, res) => {
   }
 
   const documento = db.prepare(SELECT_DOCUMENTO + ' WHERE d.id = ?').get(req.params.id);
+  auditoria.registrar(req, {
+    acao: 'alterou', entidade: 'documentos', entidadeId: documento.id,
+    descricao: req.file ? `"${documento.titulo}" - arquivo substituído por ${documento.nome_arquivo}` : `"${documento.titulo}"`
+  });
   res.json({ documento });
 });
 
@@ -126,6 +132,7 @@ router.delete('/:id', (req, res) => {
   if (!existente) return res.status(404).json({ erro: 'Documento nao encontrado.' });
   db.prepare('DELETE FROM documentos WHERE id = ?').run(req.params.id);
   removerArquivo('documentos', existente.caminho_arquivo);
+  auditoria.registrar(req, { acao: 'excluiu', entidade: 'documentos', entidadeId: existente.id, descricao: `"${existente.titulo}" (${existente.nome_arquivo})` });
   res.json({ ok: true });
 });
 

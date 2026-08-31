@@ -3,6 +3,7 @@ const express = require('express');
 const db = require('../db/conexao');
 const aasp = require('../servicos/aaspIntimacoes');
 const groq = require('../servicos/resumoIA');
+const auditoria = require('../servicos/auditoria');
 
 const router = express.Router();
 
@@ -86,7 +87,13 @@ router.put('/:id/processo', (req, res) => {
 
 // DELETE /api/publicacoes/:id - remove da fila (ex.: publicacao irrelevante)
 router.delete('/:id', (req, res) => {
+  const existente = db.prepare('SELECT * FROM publicacoes WHERE id = ?').get(req.params.id);
+  if (!existente) return res.status(404).json({ erro: 'Publicação não encontrada.' });
   db.prepare('DELETE FROM publicacoes WHERE id = ?').run(req.params.id);
+  auditoria.registrar(req, {
+    acao: 'excluiu', entidade: 'publicacoes', entidadeId: existente.id,
+    descricao: `"${existente.titulo}" (${existente.jornal || 'origem não informada'}, ${existente.data_disponibilizacao || 'sem data'})`
+  });
   res.json({ ok: true });
 });
 
@@ -149,6 +156,11 @@ router.post('/:id/criar-processo', (req, res) => {
     SELECT p.*, c.nome AS cliente_nome FROM processos p JOIN clientes c ON c.id = p.cliente_id WHERE p.id = ?
   `).get(resultadoProcesso.lastInsertRowid);
 
+  auditoria.registrar(req, {
+    acao: 'criou', entidade: 'processos', entidadeId: processo.id,
+    descricao: `Processo ${processo.numero_cnj || '(sem número CNJ)'} criado a partir de uma publicação` +
+      (clienteReaproveitado ? '' : `, com novo cliente "${processo.cliente_nome}"`)
+  });
   res.status(201).json({ criado: true, processo, clienteReaproveitado });
 });
 

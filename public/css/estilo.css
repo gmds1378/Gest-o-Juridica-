@@ -407,3 +407,34 @@ table.tabela tr.clicavel:hover { background: var(--cor-superficie-alt); }
 }
 .cartao-login h1 { font-size: 19px; text-align: center; }
 .cartao-login .subtitulo { text-align: center; color: var(--cor-texto-suave); font-size: 13px; margin-bottom: 22px; }
+.cartao-login .campo-erro { margin-bottom: 14px; text-align: center; }
+
+.botao-google {
+  width: 100%; justify-content: center; gap: 9px;
+  background: var(--cor-superficie); border: 1px solid var(--cor-borda); font-weight: 600;
+}
+.botao-google:hover { background: var(--cor-superficie-alt); }
+
+.separador-login {
+  display: flex; align-items: center; gap: 12px;
+  margin: 18px 0; color: var(--cor-texto-fraco); font-size: 12px;
+}
+.separador-login::before, .separador-login::after {
+  content: ''; flex: 1; height: 1px; background: var(--cor-borda);
+}
+
+/* ---------- Senha provisoria (troca obrigatoria no primeiro acesso) ---------- */
+.aviso-bloqueio {
+  background: var(--cor-atencao-fundo); color: var(--cor-alerta);
+  border-radius: var(--raio-pequeno); padding: 11px 13px;
+  font-size: 13px; line-height: 1.45; margin-bottom: 16px;
+}
+
+/* ---------- Senha gerada, exibida uma unica vez ---------- */
+.senha-revelada {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 19px; letter-spacing: .06em; text-align: center;
+  background: var(--cor-superficie-alt); border: 1px dashed var(--cor-borda);
+  border-radius: var(--raio-pequeno); padding: 14px; margin: 12px 0;
+  user-select: all; word-break: break-all;
+}

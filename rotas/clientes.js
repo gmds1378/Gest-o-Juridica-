@@ -1,6 +1,7 @@
 // CRUD de clientes.
 const express = require('express');
 const db = require('../db/conexao');
+const auditoria = require('../servicos/auditoria');
 
 const router = express.Router();
 
@@ -38,6 +39,7 @@ router.post('/', (req, res) => {
   `).run(nome.trim(), documento || null, telefone || null, email || null, observacoes || null);
 
   const cliente = db.prepare('SELECT * FROM clientes WHERE id = ?').get(resultado.lastInsertRowid);
+  auditoria.registrar(req, { acao: 'criou', entidade: 'clientes', entidadeId: cliente.id, descricao: `Cliente "${cliente.nome}"` });
   res.status(201).json({ cliente });
 });
 
@@ -56,6 +58,7 @@ router.put('/:id', (req, res) => {
   `).run(nome.trim(), documento || null, telefone || null, email || null, observacoes || null, req.params.id);
 
   const cliente = db.prepare('SELECT * FROM clientes WHERE id = ?').get(req.params.id);
+  auditoria.registrar(req, { acao: 'alterou', entidade: 'clientes', entidadeId: cliente.id, descricao: `Cliente "${cliente.nome}"` });
   res.json({ cliente });
 });
 
@@ -70,6 +73,7 @@ router.delete('/:id', (req, res) => {
   }
 
   db.prepare('DELETE FROM clientes WHERE id = ?').run(req.params.id);
+  auditoria.registrar(req, { acao: 'excluiu', entidade: 'clientes', entidadeId: existente.id, descricao: `Cliente "${existente.nome}"` });
   res.json({ ok: true });
 });
 

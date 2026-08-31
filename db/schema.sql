@@ -14,8 +14,46 @@ CREATE TABLE IF NOT EXISTS usuarios (
   perfil        TEXT NOT NULL DEFAULT 'usuario' CHECK (perfil IN ('admin', 'usuario')),
   cor           TEXT NOT NULL DEFAULT '#64748b',   -- cor usada para identificar o usuario em cards/agenda
   ativo         INTEGER NOT NULL DEFAULT 1,
+  email             TEXT,                          -- usado no login com Google (e-mail autorizado pelo admin)
+  google_sub        TEXT UNIQUE,                   -- id permanente da conta Google, preenchido no 1o login
+  senha_provisoria  INTEGER NOT NULL DEFAULT 0,    -- 1 = precisa trocar a senha antes de usar o sistema
   criado_em     TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
+
+-- Os indices unicos de email e google_sub sao criados em db/conexao.js, depois
+-- das migracoes: num banco que ja existia, estas colunas so aparecem la.
+
+-- ---------------------------------------------------------------------
+-- Sessoes de login (ver middleware/sessaoSqlite.js). Ficam no banco para
+-- sobreviverem a reinicios do servidor e nao vazarem memoria do processo.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS sessoes (
+  sid       TEXT PRIMARY KEY,
+  dados     TEXT NOT NULL,
+  expira_em INTEGER NOT NULL   -- epoch em milissegundos
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessoes_expira ON sessoes(expira_em);
+
+-- ---------------------------------------------------------------------
+-- Trilha de auditoria: quem criou/alterou/excluiu o que e quando.
+-- Num escritorio de advocacia importa saber quem apagou um processo ou
+-- um prazo - antes disso nao ficava registro nenhum.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS auditoria (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario_id    INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+  usuario_nome  TEXT NOT NULL DEFAULT '',   -- copia do nome, para o registro sobreviver a exclusao do usuario
+  acao          TEXT NOT NULL,              -- criou | alterou | excluiu
+  entidade      TEXT NOT NULL,              -- processos | clientes | documentos | prazos | ...
+  entidade_id   TEXT,
+  descricao     TEXT NOT NULL DEFAULT '',
+  ip            TEXT,
+  criado_em     TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_auditoria_criado ON auditoria(criado_em);
+CREATE INDEX IF NOT EXISTS idx_auditoria_entidade ON auditoria(entidade, entidade_id);
 
 -- ---------------------------------------------------------------------
 -- Clientes
@@ -46,11 +84,20 @@ CREATE TABLE IF NOT EXISTS processos (
   link_drive_pasta  TEXT,                 -- link da pasta do processo no Google Drive
   observacoes       TEXT,
   criado_em         TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-  atualizado_em     TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+  atualizado_em     TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+  -- Sincronizacao de movimentacoes (DataJud). NULL = nunca sincronizado.
+  movimentacao_tentativa_em  TEXT,
+  movimentacao_ok_em         TEXT,
+  movimentacao_erro          TEXT,
+  movimentacao_status        TEXT,
+  movimentacao_provedor      TEXT,
+  movimentacao_qtd_recebidos INTEGER,
+  movimentacao_qtd_novos     INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_processos_cliente ON processos(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_processos_status ON processos(status);
+CREATE INDEX IF NOT EXISTS idx_processos_mov_tentativa ON processos(movimentacao_tentativa_em);
 
 -- ---------------------------------------------------------------------
 -- Etiquetas coloridas (organizacao livre) e vinculo N:N com processos
@@ -203,3 +250,29 @@ CREATE TABLE IF NOT EXISTS publicacoes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_publicacoes_lida ON publicacoes(lida);
+
+-- ---------------------------------------------------------------------
+-- Movimentacoes processuais (DataJud e, no futuro, outros provedores).
+-- AASP continua so em "publicacoes" (intimacoes). Nao misturar as duas fontes.
+-- fingerprint + UNIQUE evitam duplicar o mesmo movimento em retries/corridas.
+-- historico_inicial=1: importado na primeira sincronizacao, nao gera alerta no sino.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS movimentacoes (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  processo_id      INTEGER NOT NULL REFERENCES processos(id) ON DELETE CASCADE,
+  origem           TEXT NOT NULL DEFAULT 'datajud',
+  codigo_externo   TEXT,
+  nome             TEXT NOT NULL DEFAULT '',
+  ocorrido_em      TEXT,
+  tribunal         TEXT,
+  orgao_julgador   TEXT,
+  complementos     TEXT,
+  fingerprint      TEXT NOT NULL,
+  historico_inicial INTEGER NOT NULL DEFAULT 0,
+  lida             INTEGER NOT NULL DEFAULT 0,
+  criado_em        TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+  UNIQUE (processo_id, origem, fingerprint)
+);
+
+CREATE INDEX IF NOT EXISTS idx_movimentacoes_processo ON movimentacoes(processo_id, ocorrido_em);
+CREATE INDEX IF NOT EXISTS idx_movimentacoes_nao_lidas ON movimentacoes(lida, historico_inicial);

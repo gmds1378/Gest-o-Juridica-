@@ -1,0 +1,58 @@
+# Servico systemd do Sistema de Gestao Juridica.
+#
+# Instalar:
+#   sudo cp implantacao/gestao-juridica.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now gestao-juridica
+#
+# Acompanhar:
+#   sudo systemctl status gestao-juridica
+#   sudo journalctl -u gestao-juridica -f
+
+[Unit]
+Description=Sistema de Gestao Juridica
+Documentation=https://github.com/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gestao
+Group=gestao
+WorkingDirectory=/opt/gestao-juridica
+
+# Segredos e configuracao. O arquivo fica fora do projeto, com permissao 600,
+# para nao entrar no git nem aparecer na listagem de processos.
+EnvironmentFile=/etc/gestao-juridica.env
+
+ExecStart=/usr/bin/node server.js
+
+# Se o processo cair, sobe de novo. StartLimit evita ficar reiniciando em
+# loop quando o erro e de configuracao (ex.: fuso horario errado, que aborta o
+# boot de proposito) - nesse caso o servico para e fica visivel no status.
+Restart=always
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=120
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=gestao-juridica
+
+# Endurecimento: o processo so precisa ler o proprio codigo e escrever em
+# dados/ e uploads/. Tudo o mais fica inacessivel, entao uma falha na aplicacao
+# nao vira acesso ao resto da maquina.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+ReadWritePaths=/opt/gestao-juridica/dados /opt/gestao-juridica/uploads
+
+[Install]
+WantedBy=multi-user.target

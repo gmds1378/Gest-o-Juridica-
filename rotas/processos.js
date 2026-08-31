@@ -1,8 +1,15 @@
 // CRUD de processos + dados das abas (documentos, prazos, anotacoes, etiquetas) de um processo.
 const express = require('express');
 const db = require('../db/conexao');
+const auditoria = require('../servicos/auditoria');
+const movimentacoes = require('../servicos/movimentacoes');
 
 const router = express.Router();
+
+// Descricao curta usada na trilha de auditoria.
+function identificar(processo) {
+  return `Processo ${processo.numero_cnj || '(sem número CNJ)'}`;
+}
 
 const SELECT_PROCESSO_COM_CLIENTE = `
   SELECT p.*, c.nome AS cliente_nome
@@ -73,6 +80,35 @@ router.get('/:id/anotacoes', (req, res) => {
   res.json({ anotacoes });
 });
 
+// GET /api/processos/:id/movimentacoes
+router.get('/:id/movimentacoes', (req, res) => {
+  const processo = db.prepare('SELECT id FROM processos WHERE id = ?').get(req.params.id);
+  if (!processo) return res.status(404).json({ erro: 'Processo nao encontrado.' });
+  movimentacoes.marcarLidas(req.params.id);
+  res.json({ movimentacoes: movimentacoes.listarDoProcesso(req.params.id) });
+});
+
+// POST /api/processos/:id/sincronizar-movimentacoes — sync manual (mesma regra do cron)
+router.post('/:id/sincronizar-movimentacoes', async (req, res) => {
+  try {
+    const resultado = await movimentacoes.sincronizarProcesso(req.params.id);
+    if (!resultado.ok) return res.json(resultado);
+    auditoria.registrar(req, {
+      acao: 'alterou',
+      entidade: 'processos',
+      entidadeId: req.params.id,
+      descricao: `Sincronizou movimentações (${resultado.tipo || 'manual'})`
+    });
+    res.json(resultado);
+  } catch (erro) {
+    if (erro.tipo === 'processo_inexistente') {
+      return res.status(404).json({ erro: 'Processo nao encontrado.' });
+    }
+    console.error('[datajud] sync_failed', { processoId: req.params.id, erro: erro.message });
+    res.status(400).json({ erro: erro.message });
+  }
+});
+
 // POST /api/processos
 router.post('/', (req, res) => {
   const { cliente_id, numero_cnj, vara_comarca, parte_contraria, area_direito, status,
@@ -92,6 +128,7 @@ router.post('/', (req, res) => {
 
   const processo = db.prepare(SELECT_PROCESSO_COM_CLIENTE + ' WHERE p.id = ?').get(id);
   processo.etiquetas = etiquetasDoProcesso(id);
+  auditoria.registrar(req, { acao: 'criou', entidade: 'processos', entidadeId: id, descricao: `${identificar(processo)} para ${processo.cliente_nome}` });
   res.status(201).json({ processo });
 });
 
@@ -117,6 +154,7 @@ router.put('/:id', (req, res) => {
 
   const processo = db.prepare(SELECT_PROCESSO_COM_CLIENTE + ' WHERE p.id = ?').get(req.params.id);
   processo.etiquetas = etiquetasDoProcesso(req.params.id);
+  auditoria.registrar(req, { acao: 'alterou', entidade: 'processos', entidadeId: processo.id, descricao: identificar(processo) });
   res.json({ processo });
 });
 
@@ -125,6 +163,7 @@ router.delete('/:id', (req, res) => {
   const existente = db.prepare('SELECT * FROM processos WHERE id = ?').get(req.params.id);
   if (!existente) return res.status(404).json({ erro: 'Processo nao encontrado.' });
   db.prepare('DELETE FROM processos WHERE id = ?').run(req.params.id);
+  auditoria.registrar(req, { acao: 'excluiu', entidade: 'processos', entidadeId: existente.id, descricao: identificar(existente) });
   res.json({ ok: true });
 });
 

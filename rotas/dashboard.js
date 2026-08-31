@@ -1,6 +1,7 @@
 // Dados agregados para o Painel (tela inicial).
 const express = require('express');
 const db = require('../db/conexao');
+const movimentacoes = require('../servicos/movimentacoes');
 
 const router = express.Router();
 
@@ -51,12 +52,24 @@ router.get('/alertas', (req, res) => {
   daquiA3Dias.setDate(daquiA3Dias.getDate() + 3);
   const fmt = (d) => d.toISOString().slice(0, 10);
 
-  const alertas = db.prepare(`
+  const prazos = db.prepare(`
     SELECT pr.id, pr.titulo, pr.vencimento, pr.responsavel_id, u.nome AS responsavel_nome
     FROM prazos pr LEFT JOIN usuarios u ON u.id = pr.responsavel_id
     WHERE pr.concluido = 0 AND pr.vencimento <= ?
     ORDER BY pr.vencimento ASC
   `).all(fmt(daquiA3Dias));
+
+  const alertas = [
+    ...prazos.map((p) => ({ tipo: 'prazo', ...p })),
+    ...movimentacoes.alertasNaoLidos().map((m) => ({
+      tipo: 'movimentacao',
+      id: m.id,
+      titulo: m.nome || 'Nova movimentação',
+      processo_id: m.processo_id,
+      numero_cnj: m.numero_cnj,
+      ocorrido_em: m.ocorrido_em
+    }))
+  ];
 
   res.json({ alertas });
 });

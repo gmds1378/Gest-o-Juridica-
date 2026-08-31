@@ -140,6 +140,10 @@ let _abaDetalheProcesso = 'detalhes';
 
 async function renderizarDetalheProcesso(container, id) {
   const { processo } = await api.get('/api/processos/' + id);
+  if (Estado.abaProcesso) {
+    _abaDetalheProcesso = Estado.abaProcesso;
+    Estado.abaProcesso = null;
+  }
 
   container.innerHTML = `
     <div class="cabecalho-pagina">
@@ -151,12 +155,14 @@ async function renderizarDetalheProcesso(container, id) {
       <div class="flex gap-8">
         ${processo.link_tribunal ? `<a class="botao" href="${Utilidades.escaparHtml(processo.link_tribunal)}" target="_blank" rel="noopener">${Icone('link', 15)} Tribunal</a>` : ''}
         ${processo.link_drive_pasta ? `<a class="botao" href="${Utilidades.escaparHtml(processo.link_drive_pasta)}" target="_blank" rel="noopener">${Icone('link', 15)} Pasta no Drive</a>` : ''}
+        ${processo.numero_cnj ? `<button class="botao" id="botao-sync-movimentacoes">${Icone('atualizar', 15)} Atualizar andamento</button>` : ''}
         <button class="botao botao-primario" id="botao-editar-processo">Editar</button>
       </div>
     </div>
 
     <div class="abas">
       <button data-aba="detalhes" class="${_abaDetalheProcesso === 'detalhes' ? 'ativa' : ''}">Detalhes</button>
+      <button data-aba="movimentacoes" class="${_abaDetalheProcesso === 'movimentacoes' ? 'ativa' : ''}">Andamento</button>
       <button data-aba="documentos" class="${_abaDetalheProcesso === 'documentos' ? 'ativa' : ''}">Documentos</button>
       <button data-aba="prazos" class="${_abaDetalheProcesso === 'prazos' ? 'ativa' : ''}">Prazos</button>
       <button data-aba="anotacoes" class="${_abaDetalheProcesso === 'anotacoes' ? 'ativa' : ''}">Anotações</button>
@@ -169,6 +175,27 @@ async function renderizarDetalheProcesso(container, id) {
   container.querySelector('#botao-editar-processo').addEventListener('click', () => {
     abrirModalProcesso(processo, () => renderizarDetalheProcesso(container, id));
   });
+  const botaoSync = container.querySelector('#botao-sync-movimentacoes');
+  if (botaoSync) {
+    botaoSync.addEventListener('click', async () => {
+      botaoSync.disabled = true;
+      botaoSync.textContent = 'Consultando DataJud...';
+      try {
+        const r = await api.post(`/api/processos/${id}/sincronizar-movimentacoes`);
+        if (!r.ok) alert(r.erro || 'Não foi possível sincronizar o andamento.');
+        else if (r.tipo === 'nao_encontrado') alert('Processo não encontrado no DataJud (pode estar em segredo de justiça ou ainda não enviado pelo tribunal).');
+        else if (r.inicial) alert(`Histórico inicial importado: ${r.recebidos} movimentação(ões). Novas daqui pra frente geram alerta.`);
+        else alert(r.novos ? `${r.novos} movimentação(ões) nova(s).` : 'Nenhuma movimentação nova.');
+        _abaDetalheProcesso = 'movimentacoes';
+        if (typeof atualizarSino === 'function') atualizarSino();
+        renderizarDetalheProcesso(container, id);
+      } catch (erro) {
+        alert(erro.message);
+        botaoSync.disabled = false;
+        botaoSync.innerHTML = `${Icone('atualizar', 15)} Atualizar andamento`;
+      }
+    });
+  }
 
   container.querySelectorAll('[data-aba]').forEach((botao) => {
     botao.addEventListener('click', () => {
@@ -188,12 +215,34 @@ async function renderizarDetalheProcesso(container, id) {
           <p><strong>Parte contrária:</strong> ${Utilidades.escaparHtml(processo.parte_contraria || '-')}</p>
           <p><strong>Área do direito:</strong> ${Utilidades.escaparHtml(processo.area_direito || '-')}</p>
           <p><strong>Etiquetas:</strong> ${processo.etiquetas.length ? processo.etiquetas.map((e) => `<span class="etiqueta-cor" style="background:${e.cor}22; color:${e.cor}"><span class="ponto" style="background:${e.cor}"></span>${Utilidades.escaparHtml(e.nome)}</span>`).join(' ') : '-'}</p>
+          ${processo.movimentacao_ok_em || processo.movimentacao_status ? `<p class="texto-pequeno texto-fraco">Andamento DataJud: ${Utilidades.escaparHtml(processo.movimentacao_status || '-')} · última consulta ${Utilidades.formatarDataHora(processo.movimentacao_tentativa_em)}${processo.movimentacao_erro ? ' · ' + Utilidades.escaparHtml(processo.movimentacao_erro) : ''}</p>` : ''}
         </div></div>
         <div class="cartao"><div class="cartao-corpo">
           <h2 style="font-size:15px;">Observações</h2>
           <p class="texto-suave">${Utilidades.escaparHtml(processo.observacoes || 'Nenhuma observação registrada.')}</p>
         </div></div>
       </div>`;
+  } else if (_abaDetalheProcesso === 'movimentacoes') {
+    const { movimentacoes } = await api.get(`/api/processos/${id}/movimentacoes`);
+    if (typeof atualizarSino === 'function') atualizarSino();
+    areaAba.innerHTML = `
+      <div class="cartao"><div class="cartao-corpo">
+        <h2 style="font-size:15px; margin:0 0 10px;">Andamento processual</h2>
+        <p class="texto-suave texto-pequeno">Fonte: DataJud/CNJ (pode atrasar em relação ao sistema do tribunal). Intimações da AASP continuam em Publicações.</p>
+        ${movimentacoes.length ? movimentacoes.map((m) => `
+          <div style="padding:10px 0; border-bottom:1px solid var(--cor-borda);">
+            <div class="flex-entre">
+              <strong>${Utilidades.escaparHtml(m.nome || '(sem descrição)')}</strong>
+              <span class="texto-pequeno texto-fraco">${Utilidades.formatarDataHora(m.ocorrido_em)}</span>
+            </div>
+            <div class="texto-pequeno texto-suave">
+              ${m.codigo_externo ? 'Código ' + Utilidades.escaparHtml(m.codigo_externo) : ''}
+              ${m.orgao_julgador ? ' · ' + Utilidades.escaparHtml(m.orgao_julgador) : ''}
+              ${m.historico_inicial ? ' · histórico inicial' : ''}
+              ${m.origem && m.origem !== 'datajud' ? ' · ' + Utilidades.escaparHtml(m.origem) : ''}
+            </div>
+          </div>`).join('') : '<div class="estado-vazio">Nenhuma movimentação sincronizada ainda. Use “Atualizar andamento”.</div>'}
+      </div></div>`;
   } else if (_abaDetalheProcesso === 'documentos') {
     const { documentos } = await api.get(`/api/processos/${id}/documentos`);
     areaAba.innerHTML = `
