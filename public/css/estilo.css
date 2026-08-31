@@ -145,6 +145,13 @@ h1, h2, h3, h4 { margin: 0 0 .5em; font-weight: 600; }
 .campo-linha { display: flex; gap: 12px; }
 .campo-linha .campo { flex: 1; }
 .campo-ajuda { font-size: 12px; color: var(--cor-texto-fraco); margin-top: 4px; }
+.preview-cor {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid var(--cor-borda);
+}
 .campo-erro { font-size: 12px; color: var(--cor-perigo); margin-top: 4px; }
 
 /* ---------- Layout geral do app ---------- */

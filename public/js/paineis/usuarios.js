@@ -160,9 +160,12 @@ function abrirModalUsuario(usuario, aoConcluir) {
             <div class="campo-ajuda">Administradores gerenciam usuários, integrações e veem a auditoria.</div>
           </div>
           <div class="campo"><label>Cor de identificação</label>
-            <select name="cor">
-              ${CORES_USUARIO.map((c) => `<option value="${c}"${editando && usuario.cor === c ? ' selected' : ''}>${c}</option>`).join('')}
-            </select>
+            <div class="flex gap-8" style="align-items:center;">
+              <select name="cor" id="campo-cor-usuario" style="flex:1;">
+                ${CORES_USUARIO.map((c) => `<option value="${c}"${editando && usuario.cor === c ? ' selected' : ''}>${c}</option>`).join('')}
+              </select>
+              <span class="preview-cor" id="preview-cor-usuario" title="Prévia da cor"></span>
+            </div>
           </div>
         </div>
         ${editando ? '' : '<div class="aviso-bloqueio">O sistema vai gerar uma senha provisória e exibi-la uma única vez ao salvar.</div>'}
@@ -172,6 +175,12 @@ function abrirModalUsuario(usuario, aoConcluir) {
       <button class="botao" data-fechar-modal type="button">Cancelar</button>
       <button class="botao botao-primario" id="botao-salvar-usuario" type="button">${editando ? 'Salvar' : 'Criar usuário'}</button>`,
     aoMontar: (modal) => {
+      const campoCor = modal.querySelector('#campo-cor-usuario');
+      const previewCor = modal.querySelector('#preview-cor-usuario');
+      const pintarPreview = () => { previewCor.style.background = campoCor.value; };
+      pintarPreview();
+      campoCor.addEventListener('change', pintarPreview);
+
       modal.querySelector('#botao-salvar-usuario').addEventListener('click', async () => {
         const form = modal.querySelector('#form-usuario');
         const el = modal.querySelector('#erro-usuario');
