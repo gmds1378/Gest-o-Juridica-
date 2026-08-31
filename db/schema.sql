@@ -97,7 +97,6 @@ CREATE TABLE IF NOT EXISTS processos (
 
 CREATE INDEX IF NOT EXISTS idx_processos_cliente ON processos(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_processos_status ON processos(status);
-CREATE INDEX IF NOT EXISTS idx_processos_mov_tentativa ON processos(movimentacao_tentativa_em);
 
 -- ---------------------------------------------------------------------
 -- Etiquetas coloridas (organizacao livre) e vinculo N:N com processos
